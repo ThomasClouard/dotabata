@@ -47,14 +47,18 @@ Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godo
 
 ### Commandes
 
-| Action | Touches |
-| --- | --- |
-| Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) |
-| Sauter | Espace |
-| Parcours — utiliser l'objet tenu | E ou clic droit |
-| Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches |
-| Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau |
-| Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer |
+| Action | Clavier et souris | Manette (par défaut) |
+| --- | --- | --- |
+| Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) | Stick gauche |
+| Sauter | Espace | A |
+| Parcours — utiliser l'objet tenu | E ou clic droit | X |
+| Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches | Stick droit |
+| Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
+| Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |
+| Menus | Flèches, Entrée, Échap | Croix ou stick gauche, A : valider, B : retour |
+| Lobby — régler la partie | Souris | Start, puis croix pour choisir, A pour valider, gauche / droite pour les nombres, B ou Start pour revenir au terrain |
+
+Les boutons de la manette se changent dans **Options → Configurer la manette** (avec la vitesse de la caméra au stick et l'inversion de l'axe vertical).
 
 ## Développement
 

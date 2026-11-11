@@ -1,6 +1,8 @@
 class_name GameInput
 extends Node
-## Clavier + souris. Les touches sont lues par position physique : ZQSD marche tel quel en AZERTY.
+## Clavier + souris + manette. Les touches sont lues par position physique : ZQSD marche tel quel en AZERTY.
+## Les boutons de la manette (réglables, voir Pad) enfoncent les mêmes touches virtuelles que le clavier ;
+## les sticks donnent `move` (déplacement) et `look` (caméra).
 ## Les noms de touches reprennent ceux du client d'origine (« KeyW », « Space », « Mouse0 »…).
 
 const KEYMAP := {
@@ -11,7 +13,10 @@ const KEYMAP := {
 
 var dx := 0.0
 var dy := 0.0
+var move := Vector2.ZERO  # stick gauche (x : droite, y : arrière)
+var look := Vector2.ZERO  # stick droit
 var locked := false
+var _triggers := {Pad.LT: false, Pad.RT: false}
 var _keys := {}
 var _pressed := {}
 var _released := {}
@@ -57,15 +62,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			if _keys.erase(code):
 				_released[code] = true
 	elif ev is InputEventJoypadButton:
-		# manette : seul le bouton « utiliser » (X / Carré) est lu, sous le nom « PadUse »
-		if ev.button_index != JOY_BUTTON_X:
-			return
-		if ev.pressed:
-			if not _keys.has("PadUse"):
-				_pressed["PadUse"] = true
-			_keys["PadUse"] = true
-		elif _keys.erase("PadUse"):
-			_released["PadUse"] = true
+		_pad(ev.button_index, ev.pressed)
 	elif ev is InputEventMouseMotion:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _dragging:
 			dx += ev.screen_relative.x
@@ -85,8 +82,35 @@ func release_mouse() -> void:
 			_released[k] = true
 
 
+## Bouton de manette (ou gâchette) enfoncé / relâché → touches virtuelles des actions qui lui sont liées.
+func _pad(code: int, pressed: bool) -> void:
+	for k: String in Pad.keys_for(code):
+		if pressed:
+			if not _keys.has(k):
+				_pressed[k] = true
+			_keys[k] = true
+		elif _keys.erase(k):
+			_released[k] = true
+
+
 func begin_frame() -> void:
 	locked = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	move = Vector2.ZERO
+	look = Vector2.ZERO
+	if not is_processing_unhandled_input():
+		return  # menus : la manette y passe par les actions ui_*
+	var dev := Pad.device()
+	if dev < 0:
+		return
+	move = Pad.stick(dev, JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
+	look = Pad.stick(dev, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y)
+	# gâchettes : ce sont des axes ; enfoncées au-delà de 0,55, relâchées sous 0,35
+	for code: int in _triggers:
+		var v := Input.get_joy_axis(dev, JOY_AXIS_TRIGGER_LEFT if code == Pad.LT else JOY_AXIS_TRIGGER_RIGHT)
+		var on: bool = v > 0.55 or (_triggers[code] and v > 0.35)
+		if on != _triggers[code]:
+			_triggers[code] = on
+			_pad(code, on)
 
 
 func down(a: String, b := "") -> bool:

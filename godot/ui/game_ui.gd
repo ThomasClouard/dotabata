@@ -14,6 +14,8 @@ signal quality_toggled
 signal leave_pressed
 ## Hôte : réglages du serveur modifiés ({name, max, password}).
 signal server_cfg_changed(cfg: Dictionary)
+## Manette dans le panneau du lobby (true) ou sur le terrain (false).
+signal pad_nav_changed(on: bool)
 
 var splash: Control  # écran de chargement (libéré une fois effacé)
 var menu := MainMenu.new()  # menu principal (écran titre, parties, personnage, options)
@@ -39,6 +41,7 @@ var _toast_tween: Tween
 var _pending: Variant = null
 var _pending_id := ""
 var _waiting_focus := false
+var pad_nav := false  # la manette navigue dans le panneau du lobby (au lieu de faire courir le personnage)
 var _server_form: Dictionary = {}  # réglages du serveur connus de l'hôte (vide = on n'héberge pas)
 
 
@@ -90,6 +93,7 @@ func _ready() -> void:
 	lobby.offset_bottom = -22
 	lobby.offset_right = 14 + 380
 	_lobby_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_lobby_scroll.follow_focus = true  # navigation à la manette
 	_lobby_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lobby_box.add_theme_constant_override("separation", 6)
 	_lobby_scroll.add_child(_lobby_box)
@@ -466,6 +470,7 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	var s: Dictionary = m["settings"].duplicate(true)
 	var push := func() -> void: settings_changed.emit(s)
 	var scroll := _lobby_scroll.scroll_vertical
+	var keep_focus := _focus_path()
 	for c in _lobby_box.get_children():
 		_lobby_box.remove_child(c)
 		c.queue_free()
@@ -505,6 +510,8 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	for hat: String in Protocol.HATS:
 		var b := UI.button(hat, "small", func() -> void: profile_changed.emit({"name": my_name, "color": Protocol.HAT_COLOR[hat], "hat": hat}))
 		b.tooltip_text = "Personnage"
+		if not host and hat == my_hat:
+			b.set_meta("pad_first", true)
 		if hat == my_hat:
 			UI.mark_selected(b)
 		hats.add_child(b)
@@ -631,7 +638,9 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 				box.add_child(chips)
 
 	if host:
-		box.add_child(UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit()))
+		var go := UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit())
+		go.set_meta("pad_first", true)
+		box.add_child(go)
 	else:
 		box.add_child(UI.small("En attente du lancement par l'hôte… Entraîne-toi sur le terrain !"))
 	box.add_child(UI.button("Fermer le serveur" if not _server_form.is_empty() else "Quitter le serveur", "small", func() -> void: leave_pressed.emit()))
@@ -641,6 +650,115 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 		u.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(u)
 	box.add_child(UI.small("Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le jeu pour la capturer, Échap pour la libérer) · Flèches : caméra au clavier"))
+	if Pad.device() >= 0:
+		var start := Pad.label(Pad.bindings.get("panneau", JOY_BUTTON_START))
+		var back := Pad.label(Pad.bindings["retour"])
+		if pad_nav:
+			box.add_child(UI.small("Manette : croix pour choisir, %s pour valider, gauche / droite pour les nombres, %s ou %s pour retourner sur le terrain." % [Pad.label(Pad.bindings["valider"]), back, start]))
+		else:
+			box.add_child(UI.small("Manette : %s pour régler la partie dans ce panneau." % start))
 	box.add_child(UI.row("Graphismes : %s" % Config.QUALITY_NAMES[Config.quality], [
 		UI.button("Passer en %s" % Config.QUALITY_NAMES[(Config.quality + 1) % 3], "small", func() -> void: quality_toggled.emit())]))
 	_lobby_scroll.set_deferred("scroll_vertical", scroll)
+	if pad_nav:  # après le défilement mémorisé, pour que le contrôle choisi reste visible
+		_pad_focusables(_lobby_box, true)
+		_restore_focus(keep_focus)
+
+
+# ---------- lobby à la manette ----------
+
+## La manette passe dans le panneau du lobby : tous les réglages deviennent sélectionnables à la croix ou au stick.
+func enter_pad_nav() -> void:
+	if pad_nav or not lobby.visible:
+		return
+	pad_nav = true
+	pad_nav_changed.emit(true)  # Main reconstruit le panneau, qui devient alors navigable (fin de _build_lobby)
+
+
+## Retour sur le terrain : plus aucun contrôle du panneau ne garde le focus (A, Espace… refont sauter).
+func exit_pad_nav() -> void:
+	if not pad_nav:
+		return
+	pad_nav = false
+	var f := get_viewport().gui_get_focus_owner()
+	if f and lobby.is_ancestor_of(f):
+		f.release_focus()
+	_pad_focusables(_lobby_box, false)
+	pad_nav_changed.emit(false)
+
+
+## Rend les contrôles du panneau navigables (on) ou les remet comme pour la souris (off). Les champs de texte
+## restent hors navigation (pas de clavier sur une manette) ; les nombres se règlent à gauche / droite.
+func _pad_focusables(c: Node, on: bool) -> void:
+	for k in c.get_children():
+		if k is SpinBox:
+			k.get_line_edit().focus_mode = Control.FOCUS_NONE if on else Control.FOCUS_ALL
+			k.focus_mode = Control.FOCUS_ALL if on and k.editable else Control.FOCUS_NONE
+			if on and not k.has_meta("pad_hooked"):
+				k.set_meta("pad_hooked", true)
+				var le: LineEdit = k.get_line_edit()
+				k.focus_entered.connect(func() -> void: le.add_theme_stylebox_override("normal", UI.theme.get_stylebox("focus", "LineEdit")))
+				k.focus_exited.connect(func() -> void: le.remove_theme_stylebox_override("normal"))
+			continue
+		if k is LineEdit:
+			k.focus_mode = Control.FOCUS_NONE if on else Control.FOCUS_ALL
+		elif k is BaseButton:
+			k.focus_mode = Control.FOCUS_ALL if on and not k.disabled else Control.FOCUS_NONE
+		_pad_focusables(k, on)
+
+
+## Chemin (indices des enfants) du contrôle qui a le focus dans le panneau, pour le retrouver après reconstruction.
+func _focus_path() -> Array:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f == null or not _lobby_box.is_ancestor_of(f):
+		return []
+	var path: Array = []
+	while f != _lobby_box:
+		path.push_front(f.get_index())
+		f = f.get_parent()
+	return path
+
+
+func _restore_focus(path: Array) -> void:
+	var n: Node = _lobby_box
+	for i: int in path:
+		if i >= n.get_child_count():
+			n = null
+			break
+		n = n.get_child(i)
+	var target: Control = n if n is Control and n != _lobby_box and n.focus_mode == Control.FOCUS_ALL else _find_pad_first(_lobby_box)
+	if target:
+		(func() -> void:
+			if is_instance_valid(target) and target.is_inside_tree():
+				target.grab_focus()
+				_lobby_scroll.ensure_control_visible(target)).call_deferred()
+
+
+static func _find_pad_first(c: Node) -> Control:
+	for k in c.get_children():
+		if k is Control and k.has_meta("pad_first") and k.focus_mode == Control.FOCUS_ALL:
+			return k
+		var sub := _find_pad_first(k)
+		if sub:
+			return sub
+	return null
+
+
+func _input(ev: InputEvent) -> void:
+	if not pad_nav:
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f is OptionButton and f.get_popup().visible:
+		return  # la liste ouverte gère elle-même la croix, A et B
+	var start: int = Pad.bindings.get("panneau", JOY_BUTTON_START)
+	if (ev is InputEventJoypadButton and ev.pressed and ev.button_index == start) or ev.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		exit_pad_nav()
+		return
+	if f is SpinBox and (ev.is_action_pressed("ui_left") or ev.is_action_pressed("ui_right")):
+		get_viewport().set_input_as_handled()
+		f.value += f.step * (1.0 if ev.is_action_pressed("ui_right") else -1.0)
+		return
+	if (f == null or not lobby.is_ancestor_of(f)) and (ev.is_action_pressed("ui_up") or ev.is_action_pressed("ui_down") or ev.is_action_pressed("ui_accept")):
+		get_viewport().set_input_as_handled()
+		_restore_focus([])

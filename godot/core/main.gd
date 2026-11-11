@@ -28,7 +28,7 @@ var hud: Control:
 		return ui.hud
 
 var _lobby: Variant = null  # dernier message « lobby »
-var _phase := "boot"  # boot | lobby | round | scores | podium
+var _phase := "boot"  # boot | menu | lobby | round | scores | podium
 var _waiting := false
 var _game: ClientGame
 var _cols: Array = []
@@ -51,10 +51,13 @@ var _autostarted := false
 var _shadow_mesh: Mesh
 var _shadow_mat: StandardMaterial3D
 var _debug := Debug.new()
+var _menu_cam := [Vector3.ZERO, Vector3.ZERO]  # caméra du menu (position, point visé), lissée
+var _menu_cam_set := false
 
 
 func _ready() -> void:
 	Config.load_all()
+	Config.apply_options()
 	UI.init_theme()
 	add_child(env)
 	add_child(world)
@@ -86,14 +89,33 @@ func _ready() -> void:
 	ui.stop_pressed.connect(func() -> void: net.send({"t": "stop"}))
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
 	ui.quality_toggled.connect(_toggle_quality)
-	ui.join_requested.connect(_join)
-	ui.create_requested.connect(_create_server)
-	ui.menu_profile_changed.connect(func(p: Dictionary) -> void:
+	var menu := ui.menu
+	menu.can_host = Discovery.supported()
+	menu.join_requested.connect(_join)
+	menu.create_requested.connect(_create_server)
+	menu.profile_changed.connect(func(p: Dictionary) -> void:
+		var hat_changed: bool = p["hat"] != Config.profile["hat"]
 		Config.profile = p
-		Config.save())
+		Config.save()
+		if hat_changed and _game is MenuScene:
+			_game.show_look(p["color"], p["hat"]))
+	menu.quality_changed.connect(func(q: int) -> void:
+		Config.quality = q
+		Config.save()
+		env.apply_quality(q))
+	menu.shot_changed.connect(func(n: String) -> void:
+		if _game is MenuScene:
+			_game.set_shot(n))
+	menu.spin.connect(func(a: float) -> void:
+		if _game is MenuScene:
+			_game.spin(a))
+	menu.quit_requested.connect(func() -> void: _notification(NOTIFICATION_WM_CLOSE_REQUEST))
+	menu.sound.connect(func(k: String) -> void: sfx.play(k, 0.35 if k == "tick" else 0.6))
+	if Config.args.has("menu"):
+		menu.jump_to(str(Config.args["menu"]))
 	ui.leave_pressed.connect(_on_leave)
 	ui.server_cfg_changed.connect(func(cfg: Dictionary) -> void: net.send({"t": "server", "name": cfg["name"], "max": cfg["max"], "password": cfg["password"]}))
-	discovery.changed.connect(func() -> void: ui.update_menu(discovery.list()))
+	discovery.changed.connect(func() -> void: ui.menu.update_servers(discovery.list()))
 	get_tree().set_auto_accept_quit(false)
 	_boot()
 
@@ -174,16 +196,27 @@ func me() -> ClientPlayer:
 
 # ---------- connexion ----------
 
-## Accueil : profil, serveurs trouvés sur le réseau local, création d'un serveur, adresse manuelle.
-func _show_menu(error := "") -> void:
+## Menu principal : écran titre, parties du réseau local, création, personnage, options.
+## Après une erreur, il rouvre l'écran d'où l'on venait ; to_title : retour à l'écran titre (on a quitté une partie).
+func _show_menu(error := "", to_title := false) -> void:
+	if to_title:
+		ui.menu.reset()
 	net.close()
 	_reset_session()
-	_set_game(LobbyScene.new(), null)  # décor de fond
+	_phase = "menu"
+	_set_game(MenuScene.new(), null)  # décor : le terrain du lobby, ton personnage en vitrine
+	_game.set_shot(ui.menu.current() if ui.menu.current() != "" else "titre")
+	_menu_cam_set = false
 	input.release_mouse()
+	input.set_process_unhandled_input(false)  # pas de capture de la souris ni de touches de jeu dans le menu
 	ui.set_server_form({})
+	ui.hide_overlay()
+	ui.dismiss_splash()
 	discovery.start()
-	ui.show_menu(Config.profile, Config.server, Discovery.supported(), discovery.is_running(), error)
-	ui.update_menu(discovery.list())
+	ui.menu.scanning = discovery.is_running()
+	ui.menu.last_address = Config.server
+	ui.menu.update_servers(discovery.list())
+	ui.menu.open(error)
 	_update_chrome()
 
 
@@ -232,6 +265,8 @@ func _connect(address: String, password := "") -> void:
 	if address == "":
 		return
 	discovery.stop()
+	ui.menu.close()
+	input.set_process_unhandled_input(true)
 	_address = address
 	_password = password
 	_reset_session()
@@ -251,15 +286,15 @@ func _on_closed(was_open: bool) -> void:
 		return
 	match net.close_code:
 		Session.CLOSE_PASSWORD:
-			_reset_session()
-			ui.show_password(_address, _join_name if _join_name != "" else _address, "Mot de passe incorrect." if _password != "" else "")
+			_show_menu()
+			ui.menu.ask_password(_address, _join_name if _join_name != "" else _address, "Mot de passe incorrect." if _password != "" else "")
 		Session.CLOSE_FULL:
 			_show_menu("Ce serveur est complet.")
 		Session.CLOSE_SHUTDOWN:
 			_show_menu("L'hôte a fermé le serveur.")
 		_:
 			if was_open:
-				ui.show_confirm("Connexion perdue", "Le serveur ne répond plus.", "Se reconnecter", func() -> void: _connect(_address, _password), "Accueil", func() -> void: _show_menu())
+				ui.show_confirm("Connexion perdue", "Le serveur ne répond plus.", "Se reconnecter", func() -> void: _connect(_address, _password), "Accueil", func() -> void: _show_menu("", true))
 			else:
 				_show_menu("Impossible de joindre %s. Vérifie l'adresse, et que le pare-feu de l'hôte autorise Dotabata!." % _address)
 
@@ -267,7 +302,7 @@ func _on_closed(was_open: bool) -> void:
 ## « Quitter » / « Fermer le serveur » / « Retour » : confirmation si on ferme un serveur où d'autres jouent.
 func _on_leave() -> void:
 	if host == null or my_id == "":
-		_show_menu()
+		_show_menu("", my_id != "")
 		return
 	var others := 0
 	if _lobby != null:
@@ -286,7 +321,7 @@ func _on_leave() -> void:
 func _close_own_server() -> void:
 	net.close()
 	_stop_host()
-	_show_menu()
+	_show_menu("", true)
 
 
 func _reset_session() -> void:
@@ -427,11 +462,11 @@ func _is_host() -> bool:
 func _update_chrome() -> void:
 	ui.lobby.visible = _phase == "lobby" and not _waiting
 	ui.wait.visible = _waiting
-	var in_game := _phase != "lobby" and _phase != "boot"
+	var in_game := _phase != "lobby" and _phase != "boot" and _phase != "menu"
 	ui.stop.visible = _is_host() and in_game
 	ui.server_btn.visible = _is_host() and host != null and in_game
 	ui.leave.visible = in_game or (_waiting and _phase != "boot")
-	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" else "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
+	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
 
 
 func _meta(game_id: String) -> Dictionary:
@@ -559,9 +594,14 @@ func _process(delta: float) -> void:
 	input.begin_frame()
 	_debug.drive(dt)
 
+	if _phase == "menu":
+		_menu_frame(dt)
+		input.end_frame()
+		return
+
 	# caméra : souris, ou flèches du clavier
-	cam_yaw -= input.dx * 0.0028 + (_b2i(input.down("ArrowRight")) - _b2i(input.down("ArrowLeft"))) * 2.0 * dt
-	_cam_pitch += input.dy * 0.0022 + (_b2i(input.down("ArrowUp")) - _b2i(input.down("ArrowDown"))) * 1.2 * dt
+	cam_yaw -= input.dx * 0.0028 * Config.mouse_sens + (_b2i(input.down("ArrowRight")) - _b2i(input.down("ArrowLeft"))) * 2.0 * dt
+	_cam_pitch += input.dy * 0.0022 * Config.mouse_sens + (_b2i(input.down("ArrowUp")) - _b2i(input.down("ArrowDown"))) * 1.2 * dt
 	_cam_pitch = clampf(_cam_pitch, -0.3, 1.3)
 
 	var mine := me()
@@ -690,3 +730,21 @@ func _process(delta: float) -> void:
 	particles.update(dt)
 	env.update(t, _cam_target, dt)
 	input.end_frame()
+
+
+## Image du menu principal : le décor vit, la caméra glisse vers le cadrage de l'écran affiché.
+func _menu_frame(dt: float) -> void:
+	if _game is MenuScene:
+		var shot: Array = _game.camera_shot()
+		if not _menu_cam_set:
+			_menu_cam = shot.duplicate()
+			_menu_cam_set = true
+		var k := 1.0 - exp(-3.5 * dt)
+		_menu_cam[0] = _menu_cam[0].lerp(shot[0], k)
+		_menu_cam[1] = _menu_cam[1].lerp(shot[1], k)
+		camera.look_at_from_position(_menu_cam[0], _menu_cam[1])
+		_cam_target = _menu_cam[1]
+	if _game:
+		_game.on_frame(dt)
+	particles.update(dt)
+	env.update(net.now(), _cam_target, dt)

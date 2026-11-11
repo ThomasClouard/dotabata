@@ -16,6 +16,10 @@ static var server := ""
 ## Réglages du serveur qu'on héberge (nom, joueurs max, mot de passe), mémorisés pour la fois suivante.
 static var server_cfg := {"name": "", "max": Protocol.MAX_PLAYERS, "password": ""}
 static var args := {}
+## Options du menu : plein écran, volume des effets (0 à 1), sensibilité de la souris (facteur).
+static var fullscreen := false
+static var sfx_volume := 0.8
+static var mouse_sens := 1.0
 
 
 static func load_all() -> void:
@@ -36,6 +40,9 @@ static func load_all() -> void:
 		"max": clampi(int(cf.get_value("serveur", "max", Protocol.MAX_PLAYERS)), 2, Protocol.MAX_PLAYERS),
 		"password": str(cf.get_value("serveur", "mot_de_passe", "")),
 	}
+	fullscreen = bool(cf.get_value("options", "plein_ecran", false))
+	sfx_volume = clampf(float(cf.get_value("options", "volume", 0.8)), 0.0, 1.0)
+	mouse_sens = clampf(float(cf.get_value("options", "souris", 1.0)), 0.25, 3.0)
 	if args.has("name"):
 		profile["name"] = str(args["name"]).left(16)
 	if args.has("hat") and Protocol.HATS.has(args["hat"]):
@@ -57,7 +64,22 @@ static func save() -> void:
 	cf.set_value("serveur", "nom", server_cfg["name"])
 	cf.set_value("serveur", "max", server_cfg["max"])
 	cf.set_value("serveur", "mot_de_passe", server_cfg["password"])
+	cf.set_value("options", "plein_ecran", fullscreen)
+	cf.set_value("options", "volume", sfx_volume)
+	cf.set_value("options", "souris", mouse_sens)
 	cf.save(PATH)
+
+
+## Applique le plein écran et le volume (la sensibilité est lue à chaque image par la caméra).
+static func apply_options() -> void:
+	if not OS.has_feature("web") and DisplayServer.get_name() != "headless":
+		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+		var mode := DisplayServer.window_get_mode()
+		var is_full := mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+		if is_full != fullscreen:
+			DisplayServer.window_set_mode(want)
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(sfx_volume, 0.0001)))
+	AudioServer.set_bus_mute(0, sfx_volume <= 0.001)
 
 
 ## Premier lancement : les puces graphiques intégrées et le web démarrent en « moyens ».

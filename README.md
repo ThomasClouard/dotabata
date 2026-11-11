@@ -22,12 +22,15 @@ Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le
 
 Sous Windows, `lancer.cmd` à la racine (double-clic) ouvre le jeu : l'exe exporté `godot/build/windows/Dotabata.exe` s'il existe, sinon Godot sur les sources. L'exe exporté se suffit à lui-même : rien d'autre à installer pour jouer.
 
-L'accueil montre :
+Le menu principal s'ouvre sur l'écran titre, avec ton personnage qui danse dans le décor :
 
-- ton **pseudo** et ton **personnage** ;
-- les **serveurs du réseau local**, trouvés tout seuls (nom, joueurs, « en partie », mot de passe, ping) ;
-- **Créer un serveur** : nom, nombre de joueurs maximum, mot de passe facultatif ;
-- **Rejoindre par adresse** (`192.168.1.20:3000`), pour un serveur d'un autre sous-réseau ou derrière un VPN.
+- **Jouer** : les parties du réseau local, trouvées toutes seules (nom, places, « en partie », mot de passe, ping), ou **Rejoindre par adresse** (`192.168.1.20:3000`) pour une partie d'un autre sous-réseau ou derrière un VPN ;
+- **Créer une partie** : nom, nombre de joueurs maximum, mot de passe facultatif ;
+- **Personnage** : choix parmi les 8 personnages et pseudo ;
+- **Options** : graphismes, plein écran, volume des effets, sensibilité de la souris ;
+- **Quitter**.
+
+Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir) ou à la manette.
 
 Celui qui crée le serveur en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
 

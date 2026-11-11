@@ -58,7 +58,7 @@ static func init_theme() -> void:
 	t.set_stylebox("hover", "Button", hover)
 	t.set_stylebox("pressed", "Button", pressed)
 	t.set_stylebox("disabled", "Button", disabled)
-	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	t.set_stylebox("focus", "Button", focus_ring())
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "Button", INK)
 	t.set_color("font_disabled_color", "Button", Color("#8c86a0"))
@@ -94,7 +94,18 @@ static func init_theme() -> void:
 	var chip := sbox(Color("#efeaff"), 10, 8, 3)
 	for st in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
 		t.set_stylebox(st, "CheckBox", chip)
-	t.set_stylebox("focus", "CheckBox", StyleBoxEmpty.new())
+	t.set_stylebox("focus", "CheckBox", focus_ring(10))
+
+	# curseurs (options du menu)
+	var rail := sbox(Color("#e6e1f5"), 6, 0, 4)
+	t.set_stylebox("slider", "HSlider", rail)
+	var fill_rail := sbox(ACCENT2, 6, 0, 4)
+	t.set_stylebox("grabber_area", "HSlider", fill_rail)
+	t.set_stylebox("grabber_area_highlight", "HSlider", fill_rail)
+	t.set_stylebox("focus", "HSlider", focus_ring(8))
+	var knob := _knob_icon()
+	t.set_icon("grabber", "HSlider", knob)
+	t.set_icon("grabber_highlight", "HSlider", knob)
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "CheckBox", INK)
 	t.set_color("font_disabled_color", "CheckBox", Color("#777777"))
@@ -109,6 +120,30 @@ static func init_theme() -> void:
 	t.set_stylebox("background", "ProgressBar", sbox(Color("#dddddd"), 6, 0, 0))
 	t.set_stylebox("fill", "ProgressBar", sbox(Color("#70e000"), 6, 0, 0))
 	theme = t
+
+
+## Contour de focus (navigation au clavier ou à la manette) : liseré bleu autour du contrôle.
+static func focus_ring(radius := 12) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.draw_center = false
+	s.set_corner_radius_all(radius + 3)
+	s.border_color = ACCENT2
+	s.set_border_width_all(4)
+	s.set_expand_margin_all(4)
+	s.anti_aliasing = true
+	return s
+
+
+static func _knob_icon() -> ImageTexture:
+	var s := 22
+	var img := Image.create(s, s, false, Image.FORMAT_RGBA8)
+	var c := Vector2(s / 2.0 - 0.5, s / 2.0 - 0.5)
+	for y in s:
+		for x in s:
+			var d := Vector2(x, y).distance_to(c)
+			if d <= s / 2.0 - 1.0:
+				img.set_pixel(x, y, YELLOW if d < s / 2.0 - 4.0 else INK)
+	return ImageTexture.create_from_image(img)
 
 
 static func _check_icon(on: bool) -> ImageTexture:
@@ -186,6 +221,46 @@ static func button(text: String, kind := "", on_press: Callable = Callable()) ->
 		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
 			b.add_theme_color_override(c, Color.WHITE)
 		b.add_theme_font_size_override("font_size", 20)
+	if on_press.is_valid():
+		b.pressed.connect(on_press)
+	return b
+
+
+## Gros bouton du menu principal : large, texte aligné à gauche, navigable au clavier et à la manette.
+## `accent` : rose (action principale) au lieu de jaune.
+static func menu_button(text: String, on_press: Callable = Callable(), accent := false) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_ALL
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(320, 0)
+	var base := ACCENT if accent else YELLOW
+	for st in ["normal", "hover", "pressed", "focus"]:
+		var s: StyleBoxFlat = theme.get_stylebox("normal" if st == "focus" else st, "Button").duplicate()
+		if st == "focus":
+			s = focus_ring(16)
+		else:
+			s.bg_color = base.lightened(0.18) if st == "hover" else (base.darkened(0.06) if st == "pressed" else base)
+			s.set_corner_radius_all(16)
+			s.content_margin_left = 26
+			s.content_margin_right = 26
+			s.content_margin_top = 13 if st != "pressed" else 16
+			s.content_margin_bottom = 13 if st != "pressed" else 10
+			s.shadow_offset = Vector2(0, 6 if st != "pressed" else 2)
+		b.add_theme_stylebox_override(st, s)
+	var fc := Color.WHITE if accent else INK
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, fc)
+	b.add_theme_font_size_override("font_size", 26)
+	# léger grossissement au survol ou au focus
+	var grow := func(on: bool) -> void:
+		b.pivot_offset = b.size / 2.0
+		var tw := b.create_tween()
+		tw.tween_property(b, "scale", Vector2.ONE * (1.05 if on else 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	b.mouse_entered.connect(func() -> void: grow.call(true))
+	b.mouse_exited.connect(func() -> void: grow.call(b.has_focus()))
+	b.focus_entered.connect(func() -> void: grow.call(true))
+	b.focus_exited.connect(func() -> void: grow.call(false))
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
 	return b

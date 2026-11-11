@@ -12,10 +12,13 @@ Il faut Godot 4.7 (`winget install GodotEngine.GodotEngine`).
 godot --path godot
 ```
 
-L'accueil propose de **créer un serveur** (nom, joueurs max, mot de passe facultatif) ou d'en rejoindre un : les
-serveurs du réseau local apparaissent tout seuls, sinon on saisit l'adresse (`192.168.1.20:3000` par exemple),
-retenue pour la fois suivante. Le créateur est l'hôte : il règle la partie au lobby, et les réglages du serveur à
-tout moment, même pendant une manche.
+Le menu principal (`ui/main_menu.gd`, décor `scenes/menu_scene.gd`) s'ouvre sur l'écran titre : ton personnage
+danse dans le décor, à côté des boutons **Jouer** (parties du réseau local, qui apparaissent toutes seules, ou
+rejoindre par adresse, `192.168.1.20:3000` par exemple), **Créer une partie** (nom, joueurs max, mot de passe
+facultatif), **Personnage** (carrousel des 8 personnages, pseudo), **Options** (graphismes, plein écran, volume,
+sensibilité de la souris) et **Quitter**. Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir)
+ou à la manette (croix, A, B). Le créateur d'une partie en est l'hôte : il règle la partie au lobby, et les réglages
+du serveur à tout moment, même pendant une manche.
 
 Pour tester seul, `--host` crée directement un serveur (implicite avec `--bots` ou `--autostart`) :
 
@@ -50,7 +53,7 @@ les puces intégrées Intel et le web démarrent en « moyens », les autres en 
   adresse.
 
 Fichiers du dossier utilisateur (`user://`, soit `%APPDATA%\Godot\app_userdata\Dotabata!\` sous Windows) :
-`jeux.cfg` (profil, graphismes, dernière adresse, réglages du serveur hébergé), `last-settings.json` (derniers
+`jeux.cfg` (profil, graphismes, options, dernière adresse, réglages du serveur hébergé), `last-settings.json` (derniers
 réglages de partie de l'hôte), `levels/parkour/` (niveaux perso, en plus de ceux de `levels/parkour/`).
 
 ## Ce que Godot apporte
@@ -83,6 +86,8 @@ Après `--` sur bureau, ou dans l'URL sur le web (`?server=…&bots=9`) :
 | `--auto`, `--auto=fire` | pilote automatique (court et saute, ou reste sur place et tire) |
 | `--shot=chemin.png --shot-at=5,12` | captures d'écran à ces instants, puis quitte |
 | `--looks=x,y,z,lacet,tangage,dist;…` | vue imposée 1,2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z) |
+| `--menu=jouer|creer|personnage|options` | ouvre directement cet écran du menu |
+| `--keys=3:ui_down,3.3:ui_accept` | navigation simulée dans les menus (action d'interface à cet instant) |
 | `--trace`, `--quit-at=30`, `--vsync=off` | mesures et arrêt automatique |
 
 Exemple : une manche de mortier contre neuf bots, avec deux captures.
@@ -157,8 +162,8 @@ page doit être servie en `http://` : en `https://`, le navigateur refuserait la
 | `character/` | personnages procéduraux, peau trouée, squelette |
 | `gfx/` | matériaux, formes, textures, ciel, mer, particules, shaders |
 | `games/` | affichage des deux mini-jeux |
-| `scenes/` | terrain du lobby, podium |
-| `ui/` | thème, accueil, lobby, scores, podium, HUD |
+| `scenes/` | terrain du lobby, décor du menu, podium |
+| `ui/` | thème, logo, menu principal, lobby, scores, podium, HUD |
 | `audio/` | 17 sons synthétisés au démarrage |
 | `levels/parkour/` | niveaux de parcours (écrits aussi par le MCP) |
 | `config/` | réglages de partie par défaut |

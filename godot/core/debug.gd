@@ -12,6 +12,8 @@ extends Node
 ##   --quit-at=30      quitte après ce délai
 ##   --use-at=14,20    envoie « utiliser l'objet » (parcours) à ces instants
 ##   --looks=x,y,z,yaw,pitch,dist;…   vue imposée 1.2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z)
+##   --menu=jouer|creer|personnage|options   ouvre directement cet écran du menu principal
+##   --keys=2:ui_down,2.5:ui_accept   actions d'interface simulées à ces instants (navigation du menu)
 ##   --trace           affiche l'état du joueur et les performances à chaque capture
 ##   --quality=basse|moyenne|haute, --name=…, --hat=…, --no-save, --vsync=off
 
@@ -28,6 +30,7 @@ var _quit_at := -1.0
 var _looks: Array = []
 var _uses: Array = []
 var _look_at := 0
+var _keys: Array = []  # [instant, action]
 
 
 func _ready() -> void:
@@ -43,6 +46,9 @@ func _ready() -> void:
 		_looks.append(Array(l.split_floats(",")))
 	for u: String in str(Config.args.get("use-at", "")).split(",", false):
 		_uses.append(float(u))
+	for k: String in str(Config.args.get("keys", "")).split(",", false):
+		var parts := k.split(":")
+		_keys.append([float(parts[0]), parts[1]])
 	if Config.args.has("quit-at"):
 		_quit_at = float(Config.args["quit-at"])
 
@@ -108,6 +114,13 @@ func _process(dt: float) -> void:
 	if Config.args.has("die") and before < 6.0 and _t >= 6.0:
 		for p: ClientPlayer in main.players.values():
 			p.chr.die()
+	while not _keys.is_empty() and _t >= _keys[0][0]:
+		var a: String = _keys.pop_front()[1]
+		for pressed in [true, false]:
+			var ev := InputEventAction.new()
+			ev.action = a
+			ev.pressed = pressed
+			Input.parse_input_event(ev)
 	if not _uses.is_empty() and _t >= _uses[0]:
 		_uses.pop_front()
 		main.send_game({"t": "use"})

@@ -17,6 +17,7 @@ func _init() -> void:
 	_test_vague2()
 	_test_vague3()
 	_test_mortar()
+	_test_server()
 	print("%d vérifications, %d échec(s)" % [_checks, _fails])
 	quit(1 if _fails > 0 else 0)
 
@@ -900,3 +901,55 @@ func _test_mortar() -> void:
 	for h: Dictionary in g["heights"]:
 		_same(MortarShared.column_height(blocks, int(h["p"]), int(h["x"]), int(h["z"])), int(h["h"]), "hauteur de colonne")
 	print("mortier : %s" % ("OK" if _fails == before else "ÉCHEC"))
+
+
+## Égalité profonde : nombres à EPS près (le JSON ne distingue pas entiers et flottants), clés de `want` seulement si `subset`.
+func _deep(got: Variant, want: Variant, what: String, subset := false) -> void:
+	if (got is float or got is int) and (want is float or want is int):
+		_near(float(got), float(want), what)
+	elif want is Dictionary:
+		if not got is Dictionary:
+			_same(type_string(typeof(got)), "Dictionary", what)
+			return
+		for k: Variant in want:
+			_deep(got.get(k), want[k], "%s.%s" % [what, k], subset)
+		if not subset:
+			for k: Variant in got:
+				if not want.has(k):
+					_same(k, null, what + " : clé en trop")
+	elif want is Array:
+		if not got is Array or got.size() != want.size():
+			_same(got, want, what)
+			return
+		for i in want.size():
+			_deep(got[i], want[i], "%s[%d]" % [what, i], subset)
+	else:
+		_same(got, want, what)
+
+
+func _test_server() -> void:
+	var d := _load("server.json")
+	for l: Dictionary in d["levels"]:
+		var what: String = l["level"]["name"]
+		var err: Array = []
+		var got := LevelStore.normalize(l["raw"], err)
+		_same(err, [], what + " : erreurs de lecture")
+		got["name"] = l["raw"]["name"]
+		_deep(got, l["level"], what + " (schéma)", true)
+		var v := LevelValidate.validate(got)
+		_same(v["ok"], l["ok"], what + " : terminable")
+		_deep(v["path"], l["path"], what + " : chemin")
+		_deep(v["stats"]["pathLength"], l["pathLength"], what + " : longueur")
+	_deep(GameMetas.all(), d["metas"], "fiches des jeux")
+	for st: Dictionary in d["settings"]:
+		_deep(Scoring.sanitize_settings(st["raw"], d["metas"]), st["out"], "réglages %s" % JSON.stringify(st["raw"]))
+	var seq: Array = d["seq"]
+	for r: Dictionary in d["rounds"]:
+		var k: Array = [int(r["start"])]
+		var list := Scoring.build_round_list(r["settings"], func() -> float:
+			k[0] += 1
+			return seq[(k[0] - 1) % seq.size()])
+		_deep(list, r["list"], "ordre des manches")
+	for r: Dictionary in d["results"]:
+		_deep(Scoring.score_round(r["results"]), r["rows"], "points")
+	print("serveur : OK (%d niveaux)" % d["levels"].size())

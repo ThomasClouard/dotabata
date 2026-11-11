@@ -2,19 +2,15 @@
   "name": "jeux",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "server", "client", "mcp"],
+  "workspaces": ["shared", "mcp"],
   "scripts": {
-    "dev": "concurrently -k -n serveur,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
-    "build": "npm run build -w client",
-    "start": "npm run build && npm run start -w server",
-    "serve": "npm run start -w server",
     "mcp": "node --import tsx mcp/src/index.ts",
+    "golden": "node --import tsx godot/tools/gen-golden.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "concurrently": "^9.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

@@ -13,9 +13,12 @@ import {
   bubbleParts, windGust, windAccel, lowgravAt,
   newLevelState, linkOpen, doorOpenness, leverDown, boxReady, memoryKey, memoryTiles, memoryTileAt, standsOn, touches,
 } from '../../shared/src/level.ts';
-import { readLevel, listLevels } from '../../shared/src/level-store.ts';
+import { readLevel, listLevels, LEVELS_DIR } from '../../shared/src/level-store.ts';
 import { parkourPreStep, parkourPostStep, formatTime, applyLevelMsg, applyEffectMsg, parkourJostle, memoryLayout } from '../../games/parkour/shared.ts';
 import * as mortar from '../../games/mortar/shared.ts';
+import { validateLevel } from '../../shared/src/level-validate.ts';
+import { sanitizeSettings, buildRoundList, scoreRound, ranksFromGroups } from '../../shared/src/scoring.ts';
+import { gameMetas } from '../../games/registry.ts';
 
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'golden');
 fs.mkdirSync(OUT, { recursive: true });
@@ -530,6 +533,42 @@ function inputs(steps) {
   }
   fs.writeFileSync(path.join(OUT, 'vague3.json'), JSON.stringify({ level, raw, killY: levelKillY(level), seq, times, effects, tiles, hits, keys, layouts, jostles, cols: cols.map(colOut), fx, timeline, races }));
   console.log(`vague3 : ${jostles.filter((j) => j.r1).length}/${jostles.length} trébuchements, frappes sans/avec bouclier ${fx.map((x) => x.knocks).join('/')}, hauteurs max ${fx.map((x) => x.maxY.toFixed(2)).join('/')}, courses : ${races.map((r) => r.trips + ' trébuchements, ' + r.falls + ' chutes').join(' | ')}`);
+}
+
+// ---------- serveur : schéma des niveaux, validation (chemin des bots), réglages et scores ----------
+{
+  const fx = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures', 'parkour');
+  const raws = [
+    ...listLevels().map((n) => ({ ...JSON.parse(fs.readFileSync(path.join(LEVELS_DIR, n + '.json'), 'utf8')), name: n })),
+    ...fs.readdirSync(fx).filter((f) => f.endsWith('.json')).map((f) => ({ ...JSON.parse(fs.readFileSync(path.join(fx, f), 'utf8')), name: f.slice(0, -5) })),
+  ];
+  const levels = raws.map((raw) => {
+    const level = LevelSchema.parse(raw);
+    const v = validateLevel(level);
+    return { raw, level, ok: v.ok, path: v.path, pathLength: v.stats.pathLength };
+  });
+  const rawSettings = [
+    {},
+    null,
+    { rounds: 3, order: 'list', list: ['mortar', 'nope', 'parkour'], games: ['mortar'], game: { parkour: { duration: 9999, jostle: 0, levels: ['a', 3, 'b'] }, mortar: { hp: '50', crates: '' } } },
+    { rounds: '7', order: 'random', games: ['parkour', 'parkour', 'x'], game: { mortar: { buildTime: -4, shrink: 'abc' } } },
+    { rounds: 40, order: 'weird', list: ['parkour'] },
+  ];
+  const settings = rawSettings.map((raw) => ({ raw, out: sanitizeSettings(raw, gameMetas) }));
+  let k = 0;
+  const seq = Array.from({ length: 200 }, () => rnd());
+  const rounds = [settings[2].out, settings[3].out, { ...settings[3].out, games: ['parkour', 'mortar'], rounds: 12 }, settings[4].out].map((st) => {
+    const start = k;
+    const list = buildRoundList(st, () => seq[k++ % seq.length]);
+    return { settings: st, start, list };
+  });
+  const results = [
+    ranksFromGroups([[{ id: 'a', label: '1' }], [{ id: 'b', label: '2' }, { id: 'c', label: '2' }], [{ id: 'd', label: '4' }]]),
+    ranksFromGroups([[{ id: 'x', label: 'x' }, { id: 'y', label: 'y' }]]),
+  ].map((r) => ({ results: r, rows: scoreRound(r) }));
+  const metas = gameMetas;
+  fs.writeFileSync(path.join(OUT, 'server.json'), JSON.stringify({ levels, settings, seq, rounds, results, metas }));
+  console.log(`serveur : ${levels.length} niveaux validés (${levels.filter((l) => l.ok).length} terminables)`);
 }
 
 console.log('Vecteurs de référence écrits dans', OUT);

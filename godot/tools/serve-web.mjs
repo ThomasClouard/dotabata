@@ -36,6 +36,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('\n  Dotabata! — version web du client Godot');
   console.log(`  Sur ce PC      : http://localhost:${PORT}`);
   for (const ip of ips) console.log(`  Sur le réseau  : http://${ip}:${PORT}`);
-  console.log('  Le serveur de jeu doit tourner à côté (« npm run serve », port 3000).');
+  console.log('  Le serveur de jeu doit tourner sur ce PC : lance le jeu et crée un serveur (port 3000).');
   console.log('  Autre port ou autre machine : ajoute ?server=adresse:port à l\'URL.\n');
 });

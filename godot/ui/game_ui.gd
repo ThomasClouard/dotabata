@@ -1,6 +1,6 @@
 class_name GameUI
 extends CanvasLayer
-## Interface par-dessus le jeu : écran de connexion, panneau du lobby (formulaire généré depuis les réglages
+## Interface par-dessus le jeu : accueil (liste des serveurs, création), panneau du lobby (formulaire généré depuis les réglages
 ## déclarés par chaque jeu), bandeau de manche, toasts, scores, podium. Portage de client/src/ui.ts.
 
 signal profile_changed(p: Dictionary)
@@ -10,15 +10,23 @@ signal start_pressed
 signal stop_pressed
 signal to_lobby_pressed
 signal quality_toggled
-signal connect_requested(address: String)
+## Accueil : rejoindre un serveur (mot de passe "" si aucun), en créer un ; quitter / fermer le serveur.
+signal leave_pressed
+## Hôte : réglages du serveur modifiés ({name, max, password}).
+signal server_cfg_changed(cfg: Dictionary)
+## Manette dans le panneau du lobby (true) ou sur le terrain (false).
+signal pad_nav_changed(on: bool)
 
 var splash: Control  # écran de chargement (libéré une fois effacé)
+var menu := MainMenu.new()  # menu principal (écran titre, parties, personnage, options)
 var root := Control.new()
 var hud := Control.new()
 var lobby := PanelContainer.new()
 var overlay := ColorRect.new()
 var wait: PanelContainer
 var stop: Button
+var leave: Button
+var server_btn: Button
 var corner: Label
 
 var _lobby_box := VBoxContainer.new()
@@ -33,6 +41,8 @@ var _toast_tween: Tween
 var _pending: Variant = null
 var _pending_id := ""
 var _waiting_focus := false
+var pad_nav := false  # la manette navigue dans le panneau du lobby (au lieu de faire courir le personnage)
+var _server_form: Dictionary = {}  # réglages du serveur connus de l'hôte (vide = on n'héberge pas)
 
 
 func _ready() -> void:
@@ -83,6 +93,7 @@ func _ready() -> void:
 	lobby.offset_bottom = -22
 	lobby.offset_right = 14 + 380
 	_lobby_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_lobby_scroll.follow_focus = true  # navigation à la manette
 	_lobby_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lobby_box.add_theme_constant_override("separation", 6)
 	_lobby_scroll.add_child(_lobby_box)
@@ -99,14 +110,23 @@ func _ready() -> void:
 	wait.visible = false
 	root.add_child(wait)
 
+	# boutons en bas à droite pendant une partie : réglages du serveur et arrêt (hôte), quitter (tous)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	actions.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	actions.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	actions.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	actions.offset_right = -12
+	actions.offset_bottom = -14
+	server_btn = UI.button("Réglages du serveur", "small", func() -> void: show_server_settings())
 	stop = UI.button("Arrêter la partie", "small", func() -> void: stop_pressed.emit())
-	stop.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	stop.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	stop.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	stop.offset_right = -12
-	stop.offset_bottom = -14
-	stop.visible = false
-	root.add_child(stop)
+	leave = UI.button("Quitter", "small", func() -> void: leave_pressed.emit())
+	for b: Button in [server_btn, stop, leave]:
+		b.visible = false
+		actions.add_child(b)
+	root.add_child(actions)
+
+	root.add_child(menu)
 
 	# voile sombre + carte centrale (scores, connexion)
 	overlay.color = Color(UI.INK.r, UI.INK.g, UI.INK.b, 0.35)
@@ -218,25 +238,6 @@ func hide_overlay() -> void:
 	overlay.visible = false
 
 
-func show_connect(address: String, error := "", busy := false) -> void:
-	dismiss_splash()  # après sa durée minimale : l'écran de connexion reste visible si le serveur tarde
-	var edit := LineEdit.new()
-	edit.text = address
-	edit.placeholder_text = "adresse:port, par exemple 192.168.1.20:3000"
-	var go := func() -> void: connect_requested.emit(edit.text.strip_edges())
-	edit.text_submitted.connect(func(_t: String) -> void: go.call())
-	var btn := UI.button("Connexion en cours…" if busy else "Se connecter", "big", go)
-	btn.disabled = busy
-	edit.editable = not busy
-	var kids: Array = [UI.h1("Dotabata!"), UI.label("Adresse du serveur de jeu"), edit, btn]
-	if error != "":
-		var e := UI.label(error, 14, UI.ACCENT)
-		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		kids.append(e)
-	kids.append(UI.small("Le serveur est celui du jeu d'origine : lance « npm run serve » dans le dossier du jeu, puis indique ici l'adresse affichée (port 3000 par défaut)."))
-	_fill_overlay(kids)
-
-
 func show_message(title: String, text: String, button := "", action: Callable = Callable()) -> void:
 	dismiss_splash()
 	var t := UI.label(text, 15)
@@ -245,6 +246,78 @@ func show_message(title: String, text: String, button := "", action: Callable = 
 	if button != "":
 		kids.append(UI.button(button, "big", action))
 	_fill_overlay(kids)
+
+
+## Message avec deux choix (confirmation).
+func show_confirm(title: String, text: String, yes: String, on_yes: Callable, no: String, on_no: Callable) -> void:
+	dismiss_splash()
+	var t := UI.label(text, 15)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(UI.button(yes, "big", on_yes))
+	row.add_child(UI.button(no, "", on_no))
+	_fill_overlay([UI.h1(title), t, row])
+
+
+# ---------- réglages du serveur (création depuis le menu, hôte en partie) ----------
+
+## Champs des réglages du serveur ; on_change reçoit {name, max, password} à chaque validation.
+static func server_fields(cfg: Dictionary, on_change: Callable) -> Array:
+	var cur := [cfg.duplicate()]  # boîte : les fonctions anonymes capturent par valeur
+	var name_edit := LineEdit.new()
+	name_edit.text = cfg["name"]
+	name_edit.max_length = 32
+	name_edit.custom_minimum_size.x = 190
+	var pw := LineEdit.new()
+	pw.text = cfg["password"]
+	pw.max_length = 32
+	pw.secret = true
+	pw.placeholder_text = "aucun"
+	pw.custom_minimum_size.x = 150
+	var commit := func() -> void:
+		var next := {"name": name_edit.text.strip_edges(), "max": cur[0]["max"], "password": pw.text}
+		if next != cur[0]:
+			cur[0] = next
+			on_change.call(next.duplicate())
+	for e: LineEdit in [name_edit, pw]:
+		e.text_submitted.connect(func(_t: String) -> void: e.release_focus())
+		e.focus_exited.connect(commit)
+	var mx := _num(cfg["max"], 2, Protocol.MAX_PLAYERS, 1, true, func(v: float) -> void:
+		cur[0]["max"] = int(v)
+		on_change.call(cur[0].duplicate()))
+	var show_pw := CheckBox.new()
+	show_pw.text = "voir"
+	show_pw.focus_mode = Control.FOCUS_NONE
+	show_pw.toggled.connect(func(on: bool) -> void: pw.secret = not on)
+	return [UI.row("Nom du serveur", [name_edit]), UI.row("Joueurs max", [mx]), UI.row("Mot de passe", [pw, show_pw])]
+
+
+## Réglages du serveur pendant une partie (hôte), dans le voile central.
+func show_server_settings() -> void:
+	if _server_form.is_empty():
+		return
+	var kids: Array = [UI.h1("Réglages du serveur")]
+	kids.append_array(server_fields(_server_form, _on_server_form))
+	var hint := UI.small("Ils s'appliquent tout de suite, sans interrompre la manche. Les réglages de la partie se changent au lobby.")
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	kids.append(hint)
+	kids.append(UI.button("Fermer", "big", func() -> void:
+		var f := get_viewport().gui_get_focus_owner()
+		if f:
+			f.release_focus()
+		hide_overlay.call_deferred()))
+	_fill_overlay(kids)
+
+
+func _on_server_form(next: Dictionary) -> void:
+	_server_form = next
+	server_cfg_changed.emit(next)
+
+
+## Réglages du serveur connus de l'hôte (le mot de passe ne circule pas : il vient du PC de l'hôte). {} = pas hôte.
+func set_server_form(cfg: Dictionary) -> void:
+	_server_form = cfg.duplicate()
 
 
 static func _rank_label(i: int) -> Label:
@@ -362,7 +435,7 @@ func _flush_pending() -> void:
 		render_lobby(m, _pending_id)
 
 
-func _num(value: float, mn: float, mx: float, step: float, host: bool, on_set: Callable) -> SpinBox:
+static func _num(value: float, mn: float, mx: float, step: float, host: bool, on_set: Callable) -> SpinBox:
 	var sb := SpinBox.new()
 	sb.min_value = mn
 	sb.max_value = mx
@@ -381,6 +454,7 @@ func _check(text: String, on: bool, host: bool, on_toggle: Callable) -> CheckBox
 	cb.button_pressed = on
 	cb.disabled = not host
 	cb.focus_mode = Control.FOCUS_NONE
+	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	cb.toggled.connect(on_toggle)
 	return cb
 
@@ -396,6 +470,7 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	var s: Dictionary = m["settings"].duplicate(true)
 	var push := func() -> void: settings_changed.emit(s)
 	var scroll := _lobby_scroll.scroll_vertical
+	var keep_focus := _focus_path()
 	for c in _lobby_box.get_children():
 		_lobby_box.remove_child(c)
 		c.queue_free()
@@ -404,7 +479,8 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	var my_hat: String = me["hat"]
 	var my_name: String = me["name"]
 
-	box.add_child(UI.h1("Dotabata!"))
+	var srv: Dictionary = m.get("server", {})
+	box.add_child(UI.h1(str(srv.get("name", "Dotabata!"))))
 	var name_edit := LineEdit.new()
 	name_edit.text = my_name
 	name_edit.max_length = 16
@@ -434,13 +510,16 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	for hat: String in Protocol.HATS:
 		var b := UI.button(hat, "small", func() -> void: profile_changed.emit({"name": my_name, "color": Protocol.HAT_COLOR[hat], "hat": hat}))
 		b.tooltip_text = "Personnage"
+		if not host and hat == my_hat:
+			b.set_meta("pad_first", true)
 		if hat == my_hat:
 			UI.mark_selected(b)
 		hats.add_child(b)
 	box.add_child(hats)
 
 	var players: Array = m["players"]
-	box.add_child(UI.h2("Joueurs (%d/%d)" % [players.size(), Protocol.MAX_PLAYERS]))
+	var humans := players.filter(func(p: Dictionary) -> bool: return not p["isBot"]).size()
+	box.add_child(UI.h2("Joueurs (%d/%d)" % [humans, int(srv.get("max", Protocol.MAX_PLAYERS))]))
 	var bots := 0
 	for p: Dictionary in players:
 		var tags := ""
@@ -461,6 +540,13 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 			UI.button("−", "small", func() -> void: bots_changed.emit(bots - 1)),
 			UI.label(str(bots), 15),
 			UI.button("+", "small", func() -> void: bots_changed.emit(bots + 1))]))
+
+	if host and not _server_form.is_empty():
+		box.add_child(UI.h2("Serveur"))
+		for c: Control in server_fields(_server_form, _on_server_form):
+			box.add_child(c)
+	elif srv.get("locked", false):
+		box.add_child(UI.small("Serveur protégé par un mot de passe."))
 
 	box.add_child(UI.h2("Réglages de la partie" if host else "Réglages (choisis par l'hôte)"))
 	box.add_child(UI.row("Nombre de manches", [_num(s["rounds"], 1, 15, 1, host, func(v: float) -> void:
@@ -552,13 +638,127 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 				box.add_child(chips)
 
 	if host:
-		box.add_child(UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit()))
+		var go := UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit())
+		go.set_meta("pad_first", true)
+		box.add_child(go)
 	else:
 		box.add_child(UI.small("En attente du lancement par l'hôte… Entraîne-toi sur le terrain !"))
+	box.add_child(UI.button("Fermer le serveur" if not _server_form.is_empty() else "Quitter le serveur", "small", func() -> void: leave_pressed.emit()))
 	var urls: Array = m["urls"]
-	if not urls.is_empty():
-		box.add_child(UI.small("Adresse du jeu dans un navigateur : %s" % "  ou  ".join(PackedStringArray(urls))))
+	if not _server_form.is_empty() and not urls.is_empty():
+		var u := UI.small("Les joueurs du réseau local voient ce serveur dans leur liste. Sinon, adresse à saisir : %s" % "  ou  ".join(PackedStringArray(urls)))
+		u.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(u)
 	box.add_child(UI.small("Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le jeu pour la capturer, Échap pour la libérer) · Flèches : caméra au clavier"))
+	if Pad.device() >= 0:
+		var start := Pad.label(Pad.bindings.get("panneau", JOY_BUTTON_START))
+		var back := Pad.label(Pad.bindings["retour"])
+		if pad_nav:
+			box.add_child(UI.small("Manette : croix pour choisir, %s pour valider, gauche / droite pour les nombres, %s ou %s pour retourner sur le terrain." % [Pad.label(Pad.bindings["valider"]), back, start]))
+		else:
+			box.add_child(UI.small("Manette : %s pour régler la partie dans ce panneau." % start))
 	box.add_child(UI.row("Graphismes : %s" % Config.QUALITY_NAMES[Config.quality], [
 		UI.button("Passer en %s" % Config.QUALITY_NAMES[(Config.quality + 1) % 3], "small", func() -> void: quality_toggled.emit())]))
 	_lobby_scroll.set_deferred("scroll_vertical", scroll)
+	if pad_nav:  # après le défilement mémorisé, pour que le contrôle choisi reste visible
+		_pad_focusables(_lobby_box, true)
+		_restore_focus(keep_focus)
+
+
+# ---------- lobby à la manette ----------
+
+## La manette passe dans le panneau du lobby : tous les réglages deviennent sélectionnables à la croix ou au stick.
+func enter_pad_nav() -> void:
+	if pad_nav or not lobby.visible:
+		return
+	pad_nav = true
+	pad_nav_changed.emit(true)  # Main reconstruit le panneau, qui devient alors navigable (fin de _build_lobby)
+
+
+## Retour sur le terrain : plus aucun contrôle du panneau ne garde le focus (A, Espace… refont sauter).
+func exit_pad_nav() -> void:
+	if not pad_nav:
+		return
+	pad_nav = false
+	var f := get_viewport().gui_get_focus_owner()
+	if f and lobby.is_ancestor_of(f):
+		f.release_focus()
+	_pad_focusables(_lobby_box, false)
+	pad_nav_changed.emit(false)
+
+
+## Rend les contrôles du panneau navigables (on) ou les remet comme pour la souris (off). Les champs de texte
+## restent hors navigation (pas de clavier sur une manette) ; les nombres se règlent à gauche / droite.
+func _pad_focusables(c: Node, on: bool) -> void:
+	for k in c.get_children():
+		if k is SpinBox:
+			k.get_line_edit().focus_mode = Control.FOCUS_NONE if on else Control.FOCUS_ALL
+			k.focus_mode = Control.FOCUS_ALL if on and k.editable else Control.FOCUS_NONE
+			if on and not k.has_meta("pad_hooked"):
+				k.set_meta("pad_hooked", true)
+				var le: LineEdit = k.get_line_edit()
+				k.focus_entered.connect(func() -> void: le.add_theme_stylebox_override("normal", UI.theme.get_stylebox("focus", "LineEdit")))
+				k.focus_exited.connect(func() -> void: le.remove_theme_stylebox_override("normal"))
+			continue
+		if k is LineEdit:
+			k.focus_mode = Control.FOCUS_NONE if on else Control.FOCUS_ALL
+		elif k is BaseButton:
+			k.focus_mode = Control.FOCUS_ALL if on and not k.disabled else Control.FOCUS_NONE
+		_pad_focusables(k, on)
+
+
+## Chemin (indices des enfants) du contrôle qui a le focus dans le panneau, pour le retrouver après reconstruction.
+func _focus_path() -> Array:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f == null or not _lobby_box.is_ancestor_of(f):
+		return []
+	var path: Array = []
+	while f != _lobby_box:
+		path.push_front(f.get_index())
+		f = f.get_parent()
+	return path
+
+
+func _restore_focus(path: Array) -> void:
+	var n: Node = _lobby_box
+	for i: int in path:
+		if i >= n.get_child_count():
+			n = null
+			break
+		n = n.get_child(i)
+	var target: Control = n if n is Control and n != _lobby_box and n.focus_mode == Control.FOCUS_ALL else _find_pad_first(_lobby_box)
+	if target:
+		(func() -> void:
+			if is_instance_valid(target) and target.is_inside_tree():
+				target.grab_focus()
+				_lobby_scroll.ensure_control_visible(target)).call_deferred()
+
+
+static func _find_pad_first(c: Node) -> Control:
+	for k in c.get_children():
+		if k is Control and k.has_meta("pad_first") and k.focus_mode == Control.FOCUS_ALL:
+			return k
+		var sub := _find_pad_first(k)
+		if sub:
+			return sub
+	return null
+
+
+func _input(ev: InputEvent) -> void:
+	if not pad_nav:
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f is OptionButton and f.get_popup().visible:
+		return  # la liste ouverte gère elle-même la croix, A et B
+	var start: int = Pad.bindings.get("panneau", JOY_BUTTON_START)
+	if (ev is InputEventJoypadButton and ev.pressed and ev.button_index == start) or ev.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		exit_pad_nav()
+		return
+	if f is SpinBox and (ev.is_action_pressed("ui_left") or ev.is_action_pressed("ui_right")):
+		get_viewport().set_input_as_handled()
+		f.value += f.step * (1.0 if ev.is_action_pressed("ui_right") else -1.0)
+		return
+	if (f == null or not lobby.is_ancestor_of(f)) and (ev.is_action_pressed("ui_up") or ev.is_action_pressed("ui_down") or ev.is_action_pressed("ui_accept")):
+		get_viewport().set_input_as_handled()
+		_restore_focus([])

@@ -1,0 +1,51 @@
+class_name GameMetas
+extends RefCounted
+## Fiches des mini-jeux (nom, description, réglages du lobby) et registre des jeux serveur.
+## Portage de games/*/shared.ts (parkourMeta, mortarMeta) et de games/registry.ts.
+## Ajouter un jeu : sa fiche ici, sa classe serveur dans server/games/, sa classe client dans core/registry.gd.
+
+const PARKOUR := {
+	"id": "parkour",
+	"name": "Parcours délirant",
+	"description": "Course d'obstacles : marteaux, barres tournantes, trampolines… Le premier à l'arrivée gagne.",
+	"settings": {
+		"duration": {"type": "number", "label": "Durée de la manche", "default": 150, "min": 45, "max": 300, "step": 15, "unit": "s"},
+		"hurry": {"type": "number", "label": "Temps restant après le premier arrivé", "default": 40, "min": 10, "max": 120, "step": 5, "unit": "s"},
+		"levels": {"type": "multi", "label": "Niveaux autorisés", "default": [], "options": []},
+		"jostle": {"type": "bool", "label": "Bousculades entre joueurs", "default": true},
+		"coins": {"type": "bool", "label": "Pièces : départager les ex æquo", "default": true},
+	},
+}
+
+const MORTAR := {
+	"id": "mortar",
+	"name": "Abri & mortier",
+	"description": "Construis ton abri, puis bombarde les îles voisines au mortier. Dernier survivant gagne.",
+	"settings": {
+		"buildTime": {"type": "number", "label": "Temps de construction", "default": 20, "min": 5, "max": 90, "step": 5, "unit": "s"},
+		"battleTime": {"type": "number", "label": "Durée de la bataille", "default": 120, "min": 30, "max": 300, "step": 15, "unit": "s"},
+		"budget": {"type": "number", "label": "Budget de blocs", "default": 14, "min": 0, "max": 40, "step": 1},
+		"hp": {"type": "number", "label": "Points de vie", "default": 100, "min": 20, "max": 300, "step": 10},
+		"crates": {"type": "bool", "label": "Caisses bonus", "default": true},
+		"shrink": {"type": "number", "label": "Durée du rétrécissement final", "default": 35, "min": 0, "max": 120, "step": 5, "unit": "s"},
+	},
+}
+
+
+static func all() -> Array:
+	return [PARKOUR, MORTAR]
+
+
+## Crée la manche serveur du jeu `id` (ServerGame), ou null.
+static func create_game(id: String, ctx: ServerCtx) -> ServerGame:
+	match id:
+		"parkour":
+			return ParkourServer.new(ctx)
+		"mortar":
+			return MortarServer.new(ctx)
+	return null
+
+
+## Options calculées à l'affichage du lobby (ex. niveaux présents sur le disque) : { jeu: { réglage: options } }.
+static func dynamic_options() -> Dictionary:
+	return {"parkour": {"levels": LevelStore.list_levels()}}

@@ -1,0 +1,429 @@
+extends SceneTree
+## Tests du serveur GDScript : parties complètes jouées par des bots (vraie physique, vraies règles), interactions du
+## parcours avec de faux joueurs, bataille de mortier. Portage des anciens tests vitest du serveur Node.
+##   godot --headless --path godot -s res://tests/run_server_tests.gd
+## Option : `-- --only=balade,mortier` pour ne lancer que certains cas.
+
+var _fails := 0
+var _checks := 0
+var _only: Array = []
+
+
+func _init() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			_only = a.trim_prefix("--only=").split(",")
+	var t0 := Time.get_ticks_msec()
+	_test_session_rules()
+	_test_vague3_rules()
+	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau"]:
+		if _wants(lv):
+			var need := 1 if lv in ["balade", "usine", "vertige"] else 3
+			_test_bots(lv, LevelStore.read_level(lv), 6, 260.0, need)
+	if _wants("vague1"):
+		_test_bots("vague1", _fixture("vague1"), 6, 300.0, 1)
+	if _wants("vague2"):
+		_test_bots("vague2", _fixture("vague2"), 6, 220.0, 4)
+	for jostle: bool in [true, false]:
+		if _wants("vague3"):
+			var log := _test_bots("vague3 (bousculades %s)" % ("oui" if jostle else "non"), _fixture("vague3"), 6, 170.0, 4, {"jostle": jostle})
+			_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "open" and m["link"] == "porte1"), "vague3 : porte ouverte par un bot")
+			_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "safe"), "vague3 : dalle mémoire révélée")
+			_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "coin"), "vague3 : pièce ramassée")
+	if _wants("bug-manege"):
+		for pass_i in 3:
+			_test_bots("bug-manege #%d" % pass_i, _fixture("bug-manege"), 6, 40.0, 5)
+	if _wants("bug-barre"):
+		_test_bug_barre()
+	if _wants("mortier"):
+		_test_mortar()
+	print("%d vérifications, %d échec(s) en %.1f s" % [_checks, _fails, (Time.get_ticks_msec() - t0) / 1000.0])
+	quit(1 if _fails > 0 else 0)
+
+
+func _wants(name: String) -> bool:
+	return _only.is_empty() or _only.has(name)
+
+
+func _ok(cond: bool, what: String) -> bool:
+	_checks += 1
+	if not cond:
+		_fails += 1
+		print("ÉCHEC ", what)
+	return cond
+
+
+func _eq(a: Variant, b: Variant, what: String) -> bool:
+	return _ok(a == b, "%s : obtenu %s, attendu %s" % [what, a, b])
+
+
+func _fixture(name: String) -> Dictionary:
+	var f := ProjectSettings.globalize_path("res://").path_join("../tests/fixtures/parkour/%s.json" % name)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(f))
+	var lv := LevelStore.normalize(raw)
+	lv["name"] = name
+	return lv
+
+
+## Banc d'essai sans réseau (portage de tests/sim.ts) : horloge, journal des messages diffusés, impulsions.
+class Harness extends RefCounted:
+	var t := 0.0
+	var ended := false
+	var log: Array = []
+	var impulses: Array = []
+	var ctx := ServerCtx.new()
+	var game: ServerGame
+	var init := {}
+
+	func _init(settings: Dictionary, n: int, bots: bool, start_at := 1.0) -> void:
+		for i in n:
+			var p := ServerPlayer.new()
+			p.id = ("b%d" if bots else "p%d") % i
+			p.name = "Joueur %d" % i
+			p.is_bot = bots
+			p.flags = Protocol.FLAG_GROUNDED
+			ctx.players[p.id] = p
+		ctx.settings = settings
+		ctx.start_at = start_at
+		ctx._now = func() -> float: return t
+		ctx._broadcast = func(m: Dictionary) -> void:
+			var c := m.duplicate()
+			c["at_"] = t
+			log.append(c)
+		ctx._send = func(_id: String, _m: Dictionary) -> void: pass
+		ctx._damage = func(id: String, hit: Dictionary) -> void: log.append({"t": "damage", "id": id, "hit": hit})
+		ctx._heal = func(_id: String, _n: int) -> void: pass
+		ctx._impulse = func(id: String, v: Array, tumble: float) -> void:
+			impulses.append({"id": id, "v": v, "tumble": tumble})
+			var p: ServerPlayer = ctx.players[id]
+			if p.body != null:
+				ServerCtx.impulse_body(p.body, v, tumble)
+		ctx._teleport = func(id: String, pos: Array) -> void:
+			var p: ServerPlayer = ctx.players[id]
+			if p.body != null:
+				p.body.set_pos(pos[0], pos[1], pos[2])
+		ctx._end = func() -> void: ended = true
+
+	func of(ty: String) -> Array:
+		return log.filter(func(m: Dictionary) -> bool: return m["t"] == ty)
+
+	func player(id: String) -> ServerPlayer:
+		return ctx.players[id]
+
+	## Pose un faux joueur (position de l'état réseau, au sol, immobile).
+	func put(id: String, p: Array, extra := {}) -> void:
+		var pl: ServerPlayer = ctx.players[id]
+		pl.p = [float(p[0]), float(p[1]), float(p[2])]
+		pl.v = [0.0, 0.0, 0.0]
+		pl.flags = Protocol.FLAG_GROUNDED
+		for k: String in extra:
+			pl.set(k, extra[k])
+
+	## Avance l'horloge jusqu'à `to` par pas de 1/30 s (sans bots).
+	func tick(to: float) -> void:
+		while t < to - 1e-9:
+			t = roundf((t + 1.0 / 30.0) * 1e6) / 1e6
+			game.on_tick(1.0 / 30.0)
+
+	## Partie complète jouée par les bots.
+	func simulate(max_seconds: float) -> void:
+		for p: ServerPlayer in ctx.players.values():
+			p.body = Phys.make_body(p.p[0], p.p[1], p.p[2])
+		var dt := 1.0 / 30.0
+		while not ended and t < max_seconds:
+			t += dt
+			if t >= ctx.start_at:
+				for p: ServerPlayer in ctx.players.values():
+					game.bot_tick(p, dt)
+					p.sync_from_body()
+			game.on_tick(dt)
+
+
+static func parkour_settings(extra := {}) -> Dictionary:
+	var s := Scoring.default_game_settings(GameMetas.PARKOUR)
+	s.merge(extra, true)
+	return s
+
+
+func _parkour(level: Dictionary, settings: Dictionary, n: int, bots: bool) -> Harness:
+	var h := Harness.new(settings, n, bots)
+	var g := ParkourServer.new(h.ctx)
+	h.game = g
+	var res := g.start_with(level)
+	h.init = res["init"]
+	for id: String in res["spawns"]:
+		var s: Array = res["spawns"][id]
+		h.player(id).p = [s[0], s[1], s[2]]
+	return h
+
+
+func _test_bots(what: String, level: Dictionary, n: int, max_s: float, need: int, extra := {}) -> Array:
+	var t0 := Time.get_ticks_msec()
+	_ok(not level.is_empty() and LevelValidate.validate(level)["ok"], what + " : niveau terminable")
+	var h := _parkour(level, parkour_settings({"duration": max_s - 20.0, "hurry": max_s - 20.0}.merged(extra, true)), n, true)
+	h.simulate(max_s)
+	var finished := h.of("finish").size()
+	var results := h.game.get_results()
+	_ok(finished >= need, "%s : %d arrivée(s), au moins %d attendue(s) — %s" % [what, finished, need, JSON.stringify(results)])
+	_eq(results.size(), n, what + " : lignes du classement")
+	_eq(results[0]["rank"], 0, what + " : premier rang")
+	print("%s : %d/%d arrivés en %.1f s de jeu (%.1f s)" % [what, finished, n, h.t, (Time.get_ticks_msec() - t0) / 1000.0])
+	return h.log
+
+
+## Non-régression : bot posé sur la barre basse d'un balayeur, il en descend et repart.
+func _test_bug_barre() -> void:
+	var h := _parkour(_fixture("bug-barre"), parkour_settings({"duration": 60, "hurry": 60}), 1, true)
+	h.ctx.start_at = 0.0
+	h.t = 1.0
+	var bot := h.player("b0")
+	bot.body = Phys.make_body(0.0, 0.62, 13.0)
+	var on_bar := 0.0
+	var max_z := 0.0
+	var dt := 1.0 / 30.0
+	for i in 90:
+		h.t += dt
+		h.game.bot_tick(bot, dt)
+		bot.sync_from_body()
+		if bot.body.grounded and bot.body.ground_id == 2:
+			on_bar += dt
+		max_z = maxf(max_z, bot.body.pz)
+	_ok(on_bar < 1.0, "bug-barre : resté %.2f s sur la barre" % on_bar)
+	_ok(max_z > 17.0, "bug-barre : parti vers l'arrivée (z max %.2f)" % max_z)
+	print("bug-barre : OK")
+
+
+func _test_mortar() -> void:
+	var s := Scoring.default_game_settings(GameMetas.MORTAR)
+	s.merge({"buildTime": 5, "battleTime": 90, "shrink": 30}, true)
+	var h := Harness.new(s, 5, true)
+	var g := MortarServer.new(h.ctx)
+	h.game = g
+	var res := g.on_start()
+	for id: String in res["spawns"]:
+		var sp: Array = res["spawns"][id]
+		h.player(id).p = [sp[0], sp[1], sp[2]]
+	h.simulate(120.0)
+	_ok(h.ended, "mortier : la bataille se termine")
+	_ok(not h.of("block").is_empty(), "mortier : des blocs construits")
+	_ok(h.of("shell").size() > 10, "mortier : plus de 10 obus (%d)" % h.of("shell").size())
+	_ok(not h.of("boom").is_empty(), "mortier : des explosions")
+	_ok(not h.of("hp").is_empty(), "mortier : des dégâts")
+	var results := g.get_results()
+	_eq(results.size(), 5, "mortier : lignes du classement")
+	var ids := {}
+	for r: Dictionary in results:
+		ids[r["id"]] = true
+	_eq(ids.size(), 5, "mortier : joueurs distincts")
+	_ok(results.any(func(r: Dictionary) -> bool: return r["rank"] == 0), "mortier : un vainqueur")
+	print("mortier : %d obus, %d explosions, fin à %.1f s" % [h.of("shell").size(), h.of("boom").size(), h.t])
+
+
+# ---------- règles de session ----------
+
+func _test_session_rules() -> void:
+	_eq(Scoring.points_for_rank(0, 4), 6, "points du premier")
+	_eq(Scoring.points_for_rank(3, 4), 1, "points du dernier")
+	var lv := LevelStore.list_levels()
+	_ok(lv.size() >= 7 and lv.has("balade"), "niveaux livrés trouvés : %s" % [lv])
+	_ok(not ParkourServer.playable_levels(["balade", "inconnu"]).has("inconnu"), "niveaux autorisés filtrés")
+	_eq(ParkourServer.playable_levels(["inconnu"]), lv, "aucun niveau autorisé présent : tous")
+	var cfg := Session._clean_server_cfg({"name": "  <Salle>\n ", "max": 99, "password": 3}, {"name": "x", "max": 6, "password": "pw"})
+	_eq(cfg, {"name": "Salle", "max": Protocol.MAX_PLAYERS, "password": "pw"}, "réglages du serveur nettoyés")
+	print("règles de session : OK")
+
+
+# ---------- parcours : logique serveur avec de faux joueurs ----------
+
+func _v3(extra := {}, n := 2) -> Harness:
+	return _parkour(_fixture("vague3"), parkour_settings({"duration": 200, "hurry": 200}.merged(extra, true)), n, false)
+
+
+func _idx(h: Harness, id: String) -> int:
+	var els: Array = h.init["level"]["elements"]
+	for i in els.size():
+		if els[i].get("id", "") == id:
+			return i
+	return -1
+
+
+func _el(h: Harness, i: int) -> Dictionary:
+	return h.init["level"]["elements"][i]
+
+
+func _test_vague3_rules() -> void:
+	if not _wants("vague3-regles"):
+		return
+	# bouton → ouverture diffusée (prolongée, sans spam) ; levier avec recharge
+	var s := _v3()
+	_eq(s.init["jostle"], true, "bousculades par défaut")
+	s.tick(2.0)
+	var btn := _el(s, _idx(s, "bouton"))
+	s.put("p0", [btn["pos"][0], btn["pos"][1] + btn["size"][1] / 2.0, btn["pos"][2]])
+	s.tick(2.5)
+	var opens := s.of("open")
+	_eq(opens.size(), 1, "bouton : une ouverture")
+	_eq(opens[0]["link"], "porte1", "bouton : lien")
+	_eq(opens[0]["by"], _idx(s, "bouton"), "bouton : par")
+	_ok(absf(opens[0]["until"] - opens[0]["at"] - 8.0) < 1e-6, "bouton : 8 s")
+	s.tick(4.5)
+	_ok(s.of("open").size() > 1 and s.of("open").size() < 10, "bouton : prolongé sans spam")
+	s.put("p0", [0, 0, 0])
+	var lv := _el(s, _idx(s, "levier"))
+	s.put("p1", [lv["pos"][0], lv["pos"][1] - 1, lv["pos"][2]])
+	s.tick(5.0)
+	s.tick(9.0)
+	_eq(s.of("lever").size(), 1, "levier : recharge")
+	_eq(s.of("open").filter(func(m: Dictionary) -> bool: return m["link"] == "trappe").size(), 1, "levier : trappe ouverte")
+	s.tick(13.2)
+	_eq(s.of("lever").size(), 2, "levier : réarmé")
+
+	# dalles mémoire : piégée → tombe pour tous et reste tombée ; sûre → révélée ; disposition jamais envoyée
+	s = _v3()
+	var keys: Array = s.init.keys()
+	keys.sort()
+	_eq(keys, ["coins", "cps", "endAt", "jostle", "level"], "init sans disposition")
+	s.tick(2.0)
+	var mi := _idx(s, "memoire")
+	var me := _el(s, mi)
+	var tiles := Level.memory_tiles(me)
+	for k in tiles.size():
+		var tile: Phys.Col = tiles[k]
+		s.put("p0", [tile.cx, tile.cy + tile.hy, tile.cz])
+		s.tick(2.0 + (k + 1) * 0.1)
+	var fell: Array = s.of("tile").map(func(m: Dictionary) -> int: return m["k"])
+	var safe: Array = s.of("safe").map(func(m: Dictionary) -> int: return m["k"])
+	_eq(fell.size() + safe.size(), 12, "mémoire : 12 dalles")
+	_ok(safe.size() >= me["rows"], "mémoire : un chemin sûr")
+	var tf: Phys.Col = tiles[fell[0]]
+	s.put("p1", [tf.cx, tf.cy + tf.hy, tf.cz])
+	s.tick(5.0)
+	_eq(s.of("tile").size(), fell.size(), "mémoire : pas de rediffusion")
+
+	# boîte surprise, objets et pièces
+	s = _v3({}, 3)
+	s.tick(2.0)
+	var box := _el(s, _idx(s, "boite1"))
+	var rolls := {"super": 0.05, "shield": 0.3, "banana": 0.55, "glove": 0.8}
+	var grab := func(id: String, kind: String) -> void:
+		var n := s.of("box").size()
+		(s.game as ParkourServer).item_roll = func() -> float: return rolls[kind]
+		s.put(id, [box["pos"][0], box["pos"][1] - 0.9, box["pos"][2]])
+		var k := 0
+		while k < 200 and s.of("box").size() == n:
+			s.tick(s.t + 1.0 / 30.0)
+			k += 1
+		(s.game as ParkourServer).item_roll = randf
+		var it: Dictionary = s.of("item").back()
+		_ok(it["id"] == id and it["kind"] == kind, "boîte : %s prend %s" % [id, kind])
+		s.put(id, [5, 0, 30])
+	grab.call("p0", "super")
+	s.put("p1", [box["pos"][0], box["pos"][1] - 0.9, box["pos"][2]])
+	s.tick(s.t + 1.0)
+	_eq(s.of("item").size(), 1, "boîte absente pendant sa recharge")
+	s.put("p1", [5, 0, 31])
+	s.game.on_player_message("p0", {"t": "use"})
+	_eq(s.of("item").back()["kind"], null, "objet utilisé")
+	_eq(s.of("effect").back()["kind"], "super", "effet super saut")
+	_ok(absf(s.of("effect")[0]["until"] - s.t - 8.0) < 1e-6, "super saut : 8 s")
+	grab.call("p1", "shield")
+	s.game.on_player_message("p1", {"t": "use"})
+	grab.call("p0", "glove")
+	s.put("p0", [0, 0, 24], {"yaw": 0.0})
+	s.put("p1", [0, 0, 26])
+	s.put("p2", [0.5, 0, 25.5])
+	s.game.on_player_message("p0", {"t": "use"})
+	_eq(s.of("glove").back()["hit"], ["p2"], "gant : seul p2 (sans bouclier) frappé")
+	_eq(s.impulses.map(func(x: Dictionary) -> String: return x["id"]), ["p2"], "gant : impulsion")
+	_ok(s.impulses[0]["v"][2] > 9.0, "gant : vers l'avant")
+	s.put("p1", [9, 0, 30])
+	s.put("p2", [9, 0, 31])
+	grab.call("p0", "banana")
+	s.put("p0", [0, 0, 24], {"yaw": 0.0})
+	s.game.on_player_message("p0", {"t": "use"})
+	var ban: Dictionary = s.of("banana").back()
+	_ok(absf(ban["p"][0]) < 1e-9 and absf(ban["p"][1]) < 1e-9 and absf(ban["p"][2] - 22.8) < 1e-9, "banane derrière le joueur : %s" % [ban["p"]])
+	s.put("p0", [5, 0, 30])
+	s.put("p2", [0, 0, 22.9], {"v": [0.0, 0.0, 5.0]})
+	s.tick(s.t + 0.3)
+	_eq(s.of("bananaGone").size(), 0, "banane pas encore armée")
+	s.tick(s.t + 0.5)
+	_eq(s.of("bananaGone").back()["by"], "p2", "banane écrasée par p2")
+	var slip: Dictionary = s.impulses.back()
+	_ok(slip["id"] == "p2" and absf(slip["v"][2] - 9.0) < 1e-6, "glissade")
+	var coin := _el(s, 1)
+	for id: String in ["p0", "p0", "p1"]:
+		s.put(id, [coin["pos"][0], 0, coin["pos"][2]])
+		s.tick(s.t + 0.2)
+		s.put(id, [9, 0, 9])
+	_eq(s.of("coin").filter(func(m: Dictionary) -> bool: return m["i"] == 1).map(func(m: Dictionary) -> String: return "%s:%d" % [m["id"], m["n"]]), ["p0:1", "p1:1"], "pièces")
+
+	# joint de la grille mémoire : les dalles qui portent la capsule réagissent
+	s = _v3()
+	s.tick(2.0)
+	me = _el(s, mi)
+	var top: float = me["pos"][1] + me["size"][1] / 2.0
+	var z: float = me["pos"][2] - me["size"][2] / 2.0 + 0.2
+	while z < me["pos"][2] + me["size"][2] / 2.0:
+		s.put("p0", [-1, top, z])
+		s.tick(s.t + 1.0 / 30.0)
+		z += 0.25
+	var touched := {}
+	for m: Dictionary in s.of("tile") + s.of("safe"):
+		touched[m["k"]] = true
+	var all_rows := true
+	for row in int(me["rows"]):
+		all_rows = all_rows and touched.has(row * me["cols"]) and touched.has(row * me["cols"] + 1)
+	_ok(all_rows, "joint : chaque rangée réagit")
+
+	# banane gardée au-dessus du vide ; joueurs partis ignorés
+	s = _v3({}, 3)
+	s.tick(2.0)
+	box = _el(s, _idx(s, "boite1"))
+	(s.game as ParkourServer).item_roll = func() -> float: return 0.55
+	s.put("p0", [box["pos"][0], box["pos"][1] - 0.9, box["pos"][2]])
+	s.tick(s.t + 0.1)
+	_eq(s.of("item").back()["kind"], "banana", "banane prise")
+	s.put("p0", [0, 0, 29.5], {"yaw": 0.0})
+	s.game.on_player_message("p0", {"t": "use"})
+	_eq(s.of("banana").size(), 0, "banane gardée au-dessus du vide")
+	s.put("p0", [0, 1.5, 25], {"yaw": 0.0})
+	s.game.on_player_message("p0", {"t": "use"})
+	ban = s.of("banana").back()
+	_ok(absf(ban["p"][1]) < 1e-6, "banane posée au sol")
+	s.put("p0", [5, 0, 30])
+	s.put("p2", ban["p"])
+	s.game.on_player_leave("p2")
+	s.tick(s.t + 1.5)
+	_eq(s.of("bananaGone").size(), 0, "joueur parti ignoré")
+
+	# mort dans un hazard relayée ; pièces départagent selon le réglage
+	s = _v3()
+	s.tick(2.0)
+	var lava := -1
+	var els: Array = s.init["level"]["elements"]
+	for i in els.size():
+		if els[i]["type"] == "hazard":
+			lava = i
+			break
+	s.game.on_player_message("p0", {"t": "killed", "i": lava})
+	s.game.on_player_message("p0", {"t": "killed", "i": lava})
+	s.game.on_player_message("p1", {"t": "killed", "i": 0})
+	_eq(s.of("killed").map(func(m: Dictionary) -> String: return m["id"]), ["p0"], "mort relayée une fois")
+	coin = _el(s, 1)
+	s.put("p1", [coin["pos"][0], 0, coin["pos"][2]])
+	s.tick(2.2)
+	s.put("p0", [0, 0, 4])
+	s.put("p1", [0, 0, -4])
+	var res := s.game.get_results()
+	_eq(res.map(func(r: Dictionary) -> String: return r["id"]), ["p1", "p0"], "pièces départagent")
+	_ok(str(res[0]["label"]).ends_with("1 pièce"), "libellé avec pièce : %s" % res[0]["label"])
+	var s2 := _v3({"coins": false, "jostle": false})
+	_eq(s2.init["jostle"], false, "bousculades désactivées")
+	s2.tick(2.0)
+	s2.put("p1", [coin["pos"][0], 0, coin["pos"][2]])
+	s2.tick(2.2)
+	s2.put("p0", [0, 0, 4])
+	s2.put("p1", [0, 0, -4])
+	_eq(s2.game.get_results().map(func(r: Dictionary) -> String: return r["id"]), ["p0", "p1"], "sans pièces : distance")
+	print("vague 3, règles du serveur : OK")

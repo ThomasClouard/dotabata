@@ -1,4 +1,5 @@
-// Contrat commun à tous les mini-jeux, côté serveur. (Le contrat client vit dans client/src/api.ts car il dépend de three.js.)
+// Types partagés des mini-jeux (fiches et réglages du lobby). Le jeu lui-même — serveur compris — vit dans godot/ ;
+// ces sources TypeScript servent au MCP de niveaux et à générer les vecteurs des tests de parité.
 import type { Body, Vec3 } from './physics';
 import type { Hit } from './protocol';
 

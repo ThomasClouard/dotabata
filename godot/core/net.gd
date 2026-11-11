@@ -1,13 +1,16 @@
 class_name Net
 extends Node
-## Connexion WebSocket au serveur Node d'origine + synchronisation de l'horloge serveur
-## (les obstacles en dépendent). Portage de client/src/net.ts.
+## Connexion WebSocket au serveur de jeu (hébergé par un joueur, voir ServerHost) + synchronisation de l'horloge
+## serveur (les obstacles en dépendent). Portage de client/src/net.ts.
 
 signal message(m: Dictionary)
 signal opened
 signal closed(was_open: bool)
 
 var id := ""
+## Code et raison de la dernière fermeture par le serveur (Session.CLOSE_*), -1 / "" sinon.
+var close_code := -1
+var close_reason := ""
 var _ws: WebSocketPeer
 var _hello := {}
 var _open := false
@@ -43,6 +46,8 @@ func connect_to(address: String, hello: Dictionary) -> void:
 		url = url.trim_suffix("/") + "/ws"
 	_hello = hello
 	id = ""
+	close_code = -1
+	close_reason = ""
 	_best_rtt = INF
 	_pings = 0
 	_ws = WebSocketPeer.new()
@@ -94,6 +99,9 @@ func _process(_dt: float) -> void:
 			_pings += 1
 	elif st == WebSocketPeer.STATE_CLOSED or (st == WebSocketPeer.STATE_CONNECTING and local() > _deadline):
 		var was := _open
+		if st == WebSocketPeer.STATE_CLOSED:
+			close_code = _ws.get_close_code()
+			close_reason = _ws.get_close_reason()
 		_ws = null
 		_open = false
 		closed.emit(was)

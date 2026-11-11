@@ -1,8 +1,0 @@
-{
-  "name": "@jeux/server",
-  "private": true,
-  "type": "module",
-  "scripts": { "dev": "tsx watch src/index.ts --dev", "start": "tsx src/index.ts" },
-  "dependencies": { "ws": "^8.18.0" },
-  "devDependencies": { "@types/ws": "^8.5.12" }
-}

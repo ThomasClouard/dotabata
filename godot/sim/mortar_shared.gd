@@ -21,6 +21,13 @@ const MATS := {
 	"tramp": {"cost": 3, "hp": 2, "name": "Trampoline", "color": 0x39c5ff},
 }
 const MAT_KEYS := ["wood", "stone", "tramp"]
+## Obus : rayon d'explosion, dégâts aux joueurs, dégâts aux blocs.
+const SHELLS := {
+	"normal": {"r": 2.6, "dmg": 38.0, "block": 1},
+	"mega": {"r": 4.6, "dmg": 70.0, "block": 3},
+	"cluster": {"r": 1.6, "dmg": 15.0, "block": 1},
+	"sub": {"r": 1.9, "dmg": 24.0, "block": 1},
+}
 
 
 static func block_key(plot: int, x: int, y: int, z: int) -> String:
@@ -135,6 +142,19 @@ static func shell_at(p0: Array, v0: Array, t: float) -> Vector3:
 static func shell_range(l: Array, y := 0.0) -> float:
 	var t: float = (l[4] + sqrt(l[4] * l[4] + 2.0 * G * (l[1] - y))) / G
 	return sqrt(l[3] * l[3] + l[5] * l[5]) * t
+
+
+## Puissance (0..1) pour toucher une cible à la distance horizontale `d`. Sert aux bots.
+static func power_for_distance(d: float) -> float:
+	var lo := 0.0
+	var hi := 1.0
+	for i in 20:
+		var mid := (lo + hi) / 2.0
+		if shell_range(launch(0.0, 0.0, 0.0, 0.0, mid)) + 0.6 < d:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) / 2.0
 
 
 ## Rayon de la zone sûre de chaque île à l'instant `t`.

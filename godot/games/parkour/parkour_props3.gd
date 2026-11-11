@@ -335,7 +335,7 @@ func update(t: float, dt: float) -> void:
 		gl["node"].rotation.y = p.yaw
 		k += 1
 	# poignée du bouton « utiliser » : E, clic droit, bouton X de la manette
-	if item != null and (ctx.input.hit("KeyE") or ctx.input.hit("Mouse2") or ctx.input.hit("PadUse")):
+	if item != null and (ctx.input.hit("KeyE") or ctx.input.hit("Mouse2")):
 		use_item()
 
 

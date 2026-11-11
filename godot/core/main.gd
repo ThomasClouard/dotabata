@@ -1,11 +1,14 @@
 class_name Main
 extends Node3D
-## Cœur du client : caméra troisième personne, personnage local, réseau, enchaînement lobby → manches → podium.
+## Cœur du client : accueil (serveurs du réseau local, création d'un serveur), caméra troisième personne,
+## personnage local, réseau, enchaînement lobby → manches → podium.
 ## Portage de client/src/main.ts. Ce nœud sert aussi de contexte (« ctx ») aux mini-jeux.
 
 const H := 1.0 / 60.0  # pas fixe de la physique, comme le client d'origine
 
 var net := Net.new()
+var discovery := Discovery.new()
+var host: ServerHost = null  # serveur hébergé par ce client (null si on rejoint celui d'un autre)
 var input := GameInput.new()
 var sfx := Sfx.new()
 var env := GameEnv.new()
@@ -25,7 +28,7 @@ var hud: Control:
 		return ui.hud
 
 var _lobby: Variant = null  # dernier message « lobby »
-var _phase := "boot"  # boot | lobby | round | scores | podium
+var _phase := "boot"  # boot | menu | lobby | round | scores | podium
 var _waiting := false
 var _game: ClientGame
 var _cols: Array = []
@@ -41,16 +44,22 @@ var _send_acc := 0.0
 var _last_count := -1
 var _cam_target := Vector3(0, 1.5, 0)
 var _address := ""
+var _password := ""
+var _join_name := ""  # nom du serveur qu'on rejoint (pour la demande de mot de passe)
 var _bots_applied := false
 var _autostarted := false
 var _shadow_mesh: Mesh
 var _shadow_mat: StandardMaterial3D
 var _debug := Debug.new()
+var _menu_cam := [Vector3.ZERO, Vector3.ZERO]  # caméra du menu (position, point visé), lissée
+var _menu_cam_set := false
 
 
 func _ready() -> void:
 	Config.load_all()
+	Config.apply_options()
 	UI.init_theme()
+	Cursors.install()
 	add_child(env)
 	add_child(world)
 	add_child(char_layer)
@@ -63,6 +72,7 @@ func _ready() -> void:
 	add_child(input)
 	add_child(sfx)
 	add_child(net)
+	add_child(discovery)
 	add_child(ui)
 	add_child(_debug)
 	_debug.main = self
@@ -80,8 +90,72 @@ func _ready() -> void:
 	ui.stop_pressed.connect(func() -> void: net.send({"t": "stop"}))
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
 	ui.quality_toggled.connect(_toggle_quality)
-	ui.connect_requested.connect(_connect)
-	_connect(Config.default_server())
+	var menu := ui.menu
+	menu.can_host = Discovery.supported()
+	menu.join_requested.connect(_join)
+	menu.create_requested.connect(_create_server)
+	menu.profile_changed.connect(func(p: Dictionary) -> void:
+		var hat_changed: bool = p["hat"] != Config.profile["hat"]
+		Config.profile = p
+		Config.save()
+		if hat_changed and _game is MenuScene:
+			_game.show_look(p["color"], p["hat"]))
+	menu.quality_changed.connect(func(q: int) -> void:
+		Config.quality = q
+		Config.save()
+		env.apply_quality(q))
+	menu.shot_changed.connect(func(n: String) -> void:
+		if _game is MenuScene:
+			_game.set_shot(n))
+	menu.spin.connect(func(a: float) -> void:
+		if _game is MenuScene:
+			_game.spin(a))
+	menu.quit_requested.connect(func() -> void: _notification(NOTIFICATION_WM_CLOSE_REQUEST))
+	menu.sound.connect(func(k: String) -> void: sfx.play(k, 0.35 if k == "tick" else 0.6))
+	if Config.args.has("menu"):
+		menu.jump_to(str(Config.args["menu"]))
+	ui.leave_pressed.connect(_on_leave)
+	ui.server_cfg_changed.connect(func(cfg: Dictionary) -> void: net.send({"t": "server", "name": cfg["name"], "max": cfg["max"], "password": cfg["password"]}))
+	discovery.changed.connect(func() -> void: ui.menu.update_servers(discovery.list()))
+	ui.pad_nav_changed.connect(func(on: bool) -> void:
+		input.set_process_unhandled_input(not on)  # la manette règle le panneau au lieu de faire courir le personnage
+		if on:
+			input.release_mouse()
+		if _lobby != null and _phase == "lobby":
+			ui.render_lobby(_lobby, my_id))
+	Input.joy_connection_changed.connect(func(_d: int, _c: bool) -> void:
+		_update_chrome()
+		if ui.menu.current() == "manette":
+			ui.menu.refresh())
+	get_tree().set_auto_accept_quit(false)
+	_boot()
+
+
+## Premier écran : options de lancement, sinon l'accueil.
+func _boot() -> void:
+	if Config.args.has("server"):
+		_connect(str(Config.args["server"]))
+	elif OS.has_feature("web"):
+		_connect(Config.default_server())  # le serveur est a priori sur la machine qui sert la page
+	elif Config.args.has("host") or Config.args.has("bots") or Config.args.has("autostart"):
+		_create_server(Config.server_cfg)
+	else:
+		_show_menu()
+
+
+func _exit_tree() -> void:
+	Cursors.finish()  # au cas où on quitte avant la fin du dessin des curseurs
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		# fermeture de la fenêtre : on prévient les joueurs connectés à notre serveur avant de quitter
+		if host != null:
+			net.close()
+			host.shutdown()
+			host = null
+			await get_tree().create_timer(0.3).timeout
+		get_tree().quit()
 
 
 # ---------- contexte des mini-jeux ----------
@@ -137,21 +211,132 @@ func me() -> ClientPlayer:
 
 # ---------- connexion ----------
 
-func _connect(address: String) -> void:
+## Menu principal : écran titre, parties du réseau local, création, personnage, options.
+## Après une erreur, il rouvre l'écran d'où l'on venait ; to_title : retour à l'écran titre (on a quitté une partie).
+func _show_menu(error := "", to_title := false) -> void:
+	if to_title:
+		ui.menu.reset()
+	net.close()
+	_reset_session()
+	_phase = "menu"
+	_set_game(MenuScene.new(), null)  # décor : le terrain du lobby, ton personnage en vitrine
+	_game.set_shot(ui.menu.current() if ui.menu.current() != "" else "titre")
+	_menu_cam_set = false
+	input.release_mouse()
+	input.set_process_unhandled_input(false)  # pas de capture de la souris ni de touches de jeu dans le menu
+	ui.set_server_form({})
+	ui.hide_overlay()
+	ui.dismiss_splash()
+	discovery.start()
+	ui.menu.scanning = discovery.is_running()
+	ui.menu.last_address = Config.server
+	ui.menu.update_servers(discovery.list())
+	ui.menu.open(error)
+	_update_chrome()
+
+
+## Rejoindre un serveur depuis l'accueil (mot de passe "" si aucun).
+func _join(address: String, password: String) -> void:
+	_join_name = address
+	for s: Dictionary in discovery.list():
+		if s["address"] == address:
+			_join_name = s["name"]
+	_connect(address, password)
+
+
+## Crée un serveur dans ce client, puis s'y connecte comme n'importe quel joueur.
+func _create_server(cfg: Dictionary) -> void:
+	var c := cfg.duplicate()
+	if str(c.get("name", "")) == "":
+		c["name"] = "Partie de %s" % Config.profile["name"]
+	Config.server_cfg = c
+	Config.save()
+	_stop_host()
+	host = ServerHost.new()
+	add_child(host)
+	var port := host.start(c)
+	if port < 0:
+		host.queue_free()
+		host = null
+		_show_menu("Impossible d'ouvrir un port réseau (%d à %d) : un autre programme les utilise peut-être." % [Protocol.PORT, Protocol.PORT + Protocol.PORT_SPAN - 1])
+		return
+	host.session.server_changed.connect(func(saved: Dictionary) -> void:
+		Config.server_cfg = saved
+		Config.save()
+		ui.set_server_form(saved))
+	ui.set_server_form(host.session.server_cfg)
+	_join_name = c["name"]
+	_connect("127.0.0.1:%d" % port)
+
+
+func _stop_host() -> void:
+	if host != null:
+		host.shutdown()
+		host = null
+	ui.set_server_form({})
+
+
+func _connect(address: String, password := "") -> void:
 	if address == "":
 		return
+	discovery.stop()
+	ui.menu.close()
+	input.set_process_unhandled_input(true)
 	_address = address
+	_password = password
 	_reset_session()
-	ui.show_connect(address, "", true)
-	net.connect_to(address, {"t": "hello", "name": Config.profile["name"], "color": Config.profile["color"], "hat": Config.profile["hat"]})
+	ui.show_message("Connexion…", _join_name if _join_name != "" else address)
+	var hello := {"t": "hello", "name": Config.profile["name"], "color": Config.profile["color"], "hat": Config.profile["hat"], "pw": password}
+	if host != null and address == "127.0.0.1:%d" % host.port:
+		hello["key"] = host.session.host_key  # le créateur du serveur en est l'hôte
+	net.connect_to(address, hello)
 
 
 func _on_closed(was_open: bool) -> void:
 	input.release_mouse()
-	if was_open:
-		ui.show_message("Connexion perdue", "Le serveur ne répond plus.", "Se reconnecter", func() -> void: _connect(_address))
-	else:
-		ui.show_connect(_address, "Impossible de joindre le serveur à cette adresse. Vérifie qu'il est lancé (« npm run serve ») et que le pare-feu l'autorise.")
+	if host != null:
+		# notre propre serveur ne répond plus : on le ferme proprement
+		_stop_host()
+		_show_menu("La connexion à ton serveur a été perdue.")
+		return
+	match net.close_code:
+		Session.CLOSE_PASSWORD:
+			_show_menu()
+			ui.menu.ask_password(_address, _join_name if _join_name != "" else _address, "Mot de passe incorrect." if _password != "" else "")
+		Session.CLOSE_FULL:
+			_show_menu("Ce serveur est complet.")
+		Session.CLOSE_SHUTDOWN:
+			_show_menu("L'hôte a fermé le serveur.")
+		_:
+			if was_open:
+				ui.show_confirm("Connexion perdue", "Le serveur ne répond plus.", "Se reconnecter", func() -> void: _connect(_address, _password), "Accueil", func() -> void: _show_menu("", true))
+			else:
+				_show_menu("Impossible de joindre %s. Vérifie l'adresse, et que le pare-feu de l'hôte autorise Dotabata!." % _address)
+
+
+## « Quitter » / « Fermer le serveur » / « Retour » : confirmation si on ferme un serveur où d'autres jouent.
+func _on_leave() -> void:
+	if host == null or my_id == "":
+		_show_menu("", my_id != "")
+		return
+	var others := 0
+	if _lobby != null:
+		for p: Dictionary in _lobby["players"]:
+			if not p["isBot"] and p["id"] != my_id:
+				others += 1
+	if others == 0:
+		_close_own_server()
+		return
+	ui.show_confirm("Fermer le serveur ?", "%d autre%s joueur%s sera%s déconnecté%s." % [others, "s" if others > 1 else "", "s" if others > 1 else "", "nt" if others > 1 else "", "s" if others > 1 else ""],
+		"Fermer le serveur", _close_own_server, "Annuler", func() -> void:
+			ui.hide_overlay()
+			_update_chrome())
+
+
+func _close_own_server() -> void:
+	net.close()
+	_stop_host()
+	_show_menu("", true)
 
 
 func _reset_session() -> void:
@@ -166,6 +351,7 @@ func _reset_session() -> void:
 	_waiting = false
 	_bots_applied = false
 	_autostarted = false
+	ui.exit_pad_nav()
 	ui.lobby.visible = false
 	ui.wait.visible = false
 	ui.stop.visible = false
@@ -290,10 +476,18 @@ func _is_host() -> bool:
 
 
 func _update_chrome() -> void:
+	if ui.pad_nav and (_phase != "lobby" or _waiting):
+		ui.exit_pad_nav()
 	ui.lobby.visible = _phase == "lobby" and not _waiting
 	ui.wait.visible = _waiting
-	ui.stop.visible = _is_host() and _phase != "lobby" and _phase != "boot"
-	ui.corner.text = "" if _phase == "lobby" else "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
+	var in_game := _phase != "lobby" and _phase != "boot" and _phase != "menu"
+	ui.stop.visible = _is_host() and in_game
+	ui.server_btn.visible = _is_host() and host != null and in_game
+	ui.leave.visible = in_game or (_waiting and _phase != "boot")
+	var hint := "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
+	if Pad.device() >= 0:
+		hint = "Stick gauche : bouger · %s : sauter · Stick droit : caméra · %s : utiliser" % [Pad.label(Pad.bindings["sauter"]), Pad.label(Pad.bindings["utiliser"])]
+	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else hint
 
 
 func _meta(game_id: String) -> Dictionary:
@@ -311,8 +505,9 @@ func _on_message(m: Dictionary) -> void:
 	match m["t"]:
 		"welcome":
 			my_id = m["id"]
-			Config.server = _address
-			Config.save()
+			if host == null:
+				Config.server = _address  # adresse proposée la fois suivante
+				Config.save()
 		"lobby":
 			_lobby = m
 			_sync_players(m["players"])
@@ -419,10 +614,20 @@ func _process(delta: float) -> void:
 	var t := net.now()
 	input.begin_frame()
 	_debug.drive(dt)
+	if _phase == "lobby" and input.hit("PadPanel"):
+		ui.enter_pad_nav()
+
+	if _phase == "menu":
+		_menu_frame(dt)
+		input.end_frame()
+		return
 
 	# caméra : souris, ou flèches du clavier
-	cam_yaw -= input.dx * 0.0028 + (_b2i(input.down("ArrowRight")) - _b2i(input.down("ArrowLeft"))) * 2.0 * dt
-	_cam_pitch += input.dy * 0.0022 + (_b2i(input.down("ArrowUp")) - _b2i(input.down("ArrowDown"))) * 1.2 * dt
+	cam_yaw -= input.dx * 0.0028 * Config.mouse_sens + (_b2i(input.down("ArrowRight")) - _b2i(input.down("ArrowLeft"))) * 2.0 * dt
+	_cam_pitch += input.dy * 0.0022 * Config.mouse_sens + (_b2i(input.down("ArrowUp")) - _b2i(input.down("ArrowDown"))) * 1.2 * dt
+	# stick droit de la manette
+	cam_yaw -= input.look.x * 2.6 * Pad.look_sens * dt
+	_cam_pitch += input.look.y * 1.6 * Pad.look_sens * dt * (-1.0 if Pad.invert_y else 1.0)
 	_cam_pitch = clampf(_cam_pitch, -0.3, 1.3)
 
 	var mine := me()
@@ -430,8 +635,8 @@ func _process(delta: float) -> void:
 		_cols = _game.colliders(t)
 		if _active:
 			var frozen := _phase == "round" and t < start_at
-			var f := _b2i(input.down("KeyW")) - _b2i(input.down("KeyS"))
-			var r := _b2i(input.down("KeyD")) - _b2i(input.down("KeyA"))
+			var f := _b2i(input.down("KeyW")) - _b2i(input.down("KeyS")) - input.move.y  # stick gauche : analogique
+			var r := _b2i(input.down("KeyD")) - _b2i(input.down("KeyA")) + input.move.x
 			var fx := sin(cam_yaw)
 			var fz := cos(cam_yaw)
 			var mx := fx * f - fz * r
@@ -551,3 +756,21 @@ func _process(delta: float) -> void:
 	particles.update(dt)
 	env.update(t, _cam_target, dt)
 	input.end_frame()
+
+
+## Image du menu principal : le décor vit, la caméra glisse vers le cadrage de l'écran affiché.
+func _menu_frame(dt: float) -> void:
+	if _game is MenuScene:
+		var shot: Array = _game.camera_shot()
+		if not _menu_cam_set:
+			_menu_cam = shot.duplicate()
+			_menu_cam_set = true
+		var k := 1.0 - exp(-3.5 * dt)
+		_menu_cam[0] = _menu_cam[0].lerp(shot[0], k)
+		_menu_cam[1] = _menu_cam[1].lerp(shot[1], k)
+		camera.look_at_from_position(_menu_cam[0], _menu_cam[1])
+		_cam_target = _menu_cam[1]
+	if _game:
+		_game.on_frame(dt)
+	particles.update(dt)
+	env.update(net.now(), _cam_target, dt)

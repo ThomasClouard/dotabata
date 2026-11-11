@@ -319,6 +319,9 @@ func _screen_title() -> Control:
 	foot.add_child(UI.outlined("%s · %s" % [Config.profile["name"], HAT_NAMES.get(Config.profile["hat"], Config.profile["hat"])], 20, Color.WHITE, 7))
 	_count = UI.outlined("", 18, UI.YELLOW, 7)
 	foot.add_child(_count)
+	var version := str(ProjectSettings.get_setting("application/config/version", ""))
+	if version != "":  # renseignée par la compilation sur GitHub à partir du tag (v1.2.0)
+		foot.add_child(UI.outlined("v" + version, 16, Color.WHITE, 6))
 	root.add_child(foot)
 	_update_count()
 	return root

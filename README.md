@@ -27,6 +27,20 @@ Sous Windows, à la racine du dépôt :
 
 L'exe compilé se suffit à lui-même : c'est le seul fichier à copier sur les PC des joueurs, rien d'autre à installer pour jouer. Recompile après chaque modification du jeu ou ajout de niveau.
 
+### Publier une version
+
+Pousser un tag de version fait compiler l'exe par GitHub (workflow [.github/workflows/exe.yml](.github/workflows/exe.yml)) et le publie dans l'onglet **Releases** du dépôt, prêt à télécharger :
+
+```bash
+git tag v1.2.0
+```
+
+```bash
+git push origin v1.2.0
+```
+
+Le numéro (forme `v1.2.3`) est inscrit dans les propriétés de l'exe et affiché en bas de l'écran titre. Chaque pull request est aussi compilée (l'exe est alors dans les artefacts du workflow, onglet **Actions**), et on peut lancer une compilation à la main depuis cet onglet.
+
 Le menu principal s'ouvre sur l'écran titre, avec ton personnage qui danse dans le décor :
 
 - **Jouer** : les parties du réseau local, trouvées toutes seules (nom, places, « en partie », mot de passe, ping), ou **Rejoindre par adresse** (`192.168.1.20:3000`) pour une partie d'un autre sous-réseau ou derrière un VPN ;

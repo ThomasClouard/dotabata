@@ -1,6 +1,6 @@
-# 🎉 Dotabata! — party game LAN 3D dans le navigateur
+# 🎉 Dotabata! — party game LAN 3D
 
-Party game pour 2 à 10 joueurs sur le même réseau local. Un PC héberge, les autres ouvrent un lien dans leur navigateur : rien à installer côté joueurs. Une partie enchaîne des manches de mini-jeux (10–15 min au total) avec classement cumulé et podium final.
+Party game pour 2 à 10 joueurs sur le même réseau local. **Un seul programme** : chacun lance le jeu, l'un d'eux crée un serveur depuis l'accueil, les autres le voient apparaître dans leur liste et le rejoignent. Une partie enchaîne des manches de mini-jeux (10–15 min au total) avec classement cumulé et podium final.
 
 *Dotabata* (ドタバタ) : en japonais, le chahut maladroit, tout le monde qui court et trébuche dans tous les sens.
 
@@ -16,23 +16,26 @@ Deux mini-jeux pour l'instant :
   Réglages de la manche en plus de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
 
-## Lancer une partie
+Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le lancer depuis les sources, ses options et l'export.
 
-Prérequis : Node.js 22.
+## Jouer
 
-```bash
-npm install
-```
+Sous Windows, `lancer.cmd` à la racine (double-clic) ouvre le jeu : l'exe exporté `godot/build/windows/Dotabata.exe` s'il existe, sinon Godot sur les sources. L'exe exporté se suffit à lui-même : rien d'autre à installer pour jouer.
 
-```bash
-npm start
-```
+L'accueil montre :
 
-Le serveur affiche l'adresse à donner aux autres joueurs (`http://<ip-du-pc>:3000`). Si les autres PC n'arrivent pas à se connecter, autorise Node.js dans le pare-feu Windows (réseau privé, port 3000).
+- ton **pseudo** et ton **personnage** ;
+- les **serveurs du réseau local**, trouvés tout seuls (nom, joueurs, « en partie », mot de passe, ping) ;
+- **Créer un serveur** : nom, nombre de joueurs maximum, mot de passe facultatif ;
+- **Rejoindre par adresse** (`192.168.1.20:3000`), pour un serveur d'un autre sous-réseau ou derrière un VPN.
 
-Le premier joueur connecté est l'hôte (👑) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les valeurs de départ sont dans [config/defaults.json](config/defaults.json) ; les derniers réglages de l'hôte sont mémorisés dans `config/last-settings.json`.
+Celui qui crée le serveur en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
 
-Variable d'environnement : `JEUX_PORT` change le port du serveur (3000 par défaut).
+Quitter le jeu ou « Fermer le serveur » arrête la partie pour tout le monde (les autres reviennent à l'accueil avec un message).
+
+Au premier serveur créé, Windows demande d'autoriser Dotabata! sur le réseau : accepte pour les **réseaux privés**, sinon les autres PC ne le verront pas. Le serveur utilise le port 3000 (TCP pour le jeu, UDP pour la découverte), ou le suivant libre jusqu'à 3009.
+
+Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godot/config/defaults.json) ; les derniers réglages de l'hôte sont mémorisés dans le dossier utilisateur du jeu (`%APPDATA%\Godot\app_userdata\Dotabata!\`).
 
 ### Commandes
 
@@ -47,45 +50,48 @@ Variable d'environnement : `JEUX_PORT` change le port du serveur (3000 par défa
 
 ## Développement
 
+Le jeu (client **et** serveur) est dans `godot/`. Les sources TypeScript qui restent servent au serveur MCP de niveaux et de référence aux tests de parité de la physique.
+
 ```bash
-npm run dev
+npm install
 ```
 
-Lance le serveur de jeu (port 3000, relancé à chaque modification) et Vite (port 5173, rechargement à chaud). Ouvre `http://localhost:5173`.
+```bash
+npm test
+```
 
-- `http://localhost:5173/?bots=9` remplit le lobby de bots pour tester seul (l'hôte peut aussi en ajouter depuis le lobby).
-- `npm test` — tests vitest : physique, schéma et validation des niveaux, scores, balistique, et **parties complètes jouées par des bots** sur chaque niveau.
-- `npm run typecheck` — vérification TypeScript de tout le dépôt.
-- Dans la console du navigateur, `jeux` donne accès à l'état du client (corps du joueur, joueurs, réseau).
+- `npm test` — tests vitest de la référence TypeScript : physique, schéma et validation des niveaux, scores, balistique.
+- `npm run typecheck` — vérification TypeScript.
+- `npm run golden` — régénère les vecteurs de référence des tests de parité Godot (à relancer après une modification de `shared/src/` ou de `games/*/shared.ts`).
+- Les tests du jeu et du serveur (parties complètes jouées par des bots sur chaque niveau, règles du parcours, connexion réelle avec mot de passe et découverte LAN) se lancent avec Godot : voir [godot/README.md](godot/README.md).
 
 ## Architecture
 
 ```
-shared/src/   physique maison, protocole, contrat des jeux, scores, format + validation des niveaux
-server/src/   serveur HTTP + WebSocket : lobby, manches, scores, relais des états
-client/src/   rendu three.js, caméra, personnage désarticulé, interface, sons synthétisés
-games/<id>/   un mini-jeu = shared.ts (règles communes) + server.ts (autorité) + client.ts (affichage)
-levels/parkour/*.json   niveaux de parcours
-mcp/src/      serveur MCP pour créer des niveaux
-tests/        tests vitest
+godot/            le jeu : client (rendu, personnages, interface) et serveur intégré
+godot/server/     serveur : session (lobby, manches, scores), règles serveur des mini-jeux, bots, découverte LAN
+godot/sim/        physique maison, cinématique des obstacles, règles partagées (portées à l'identique du TypeScript)
+godot/levels/parkour/*.json   niveaux de parcours (livrés dans l'exe)
+shared/src/       référence TypeScript : physique, format + validation des niveaux, scores
+games/<id>/shared.ts          référence TypeScript des règles partagées de chaque mini-jeu
+mcp/src/          serveur MCP pour créer des niveaux
+tests/            tests vitest de la référence TypeScript
 ```
 
 Principes réseau, pensés pour le LAN :
 
+- **Le serveur tourne dans l'exe de l'hôte**, qui s'y connecte lui-même en WebSocket comme n'importe quel joueur. Les autres le trouvent par une requête UDP diffusée sur le réseau local.
 - **Chaque client simule son propre personnage** avec la physique partagée et envoie son état 30 fois par seconde : réactivité parfaite, sans prédiction ni réconciliation. Les autres joueurs sont interpolés.
-- **Le serveur fait autorité sur les règles** : phases, chronos, checkpoints, arrivées, obus, destruction des blocs, dégâts, scores.
+- **Le serveur fait autorité sur les règles** : phases, chronos, checkpoints, arrivées, obus, destruction des blocs, dégâts, scores. Il simule aussi les bots.
 - **Les obstacles sont déterministes** : leur position est une fonction pure de l'horloge serveur synchronisée, donc rien à synchroniser.
 
-Le rendu est entièrement procédural (aucune texture ni modèle à charger) : formes arrondies, matériaux brillants, ombres portées, ciel en dégradé, mer animée et bloom, réunis dans [client/src/gfx.ts](client/src/gfx.ts). Sur une petite machine, le bouton « Graphismes » en bas du lobby bascule en mode léger (sans ombres ni bloom) ; le choix est mémorisé par navigateur.
-
-Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
+Le rendu est entièrement procédural (aucune texture ni modèle à charger). Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
 
 ## Ajouter un mini-jeu
 
-1. Crée `games/<id>/shared.ts` avec un `GameMeta` : identifiant, nom, description et `settings` (chaque réglage déclare son type, sa valeur par défaut et ses bornes — le lobby génère le formulaire tout seul).
-2. Crée `games/<id>/server.ts` qui exporte un `ServerGameModule` ([shared/src/game-api.ts](shared/src/game-api.ts)) : `onStart` (renvoie les données d'initialisation et les points d'apparition), `onTick`, `onPlayerMessage`, `onPlayerLeave`, `getResults`, et `botTick` si tu veux des bots.
-3. Crée `games/<id>/client.ts` qui exporte une fabrique de `ClientGame` ([client/src/api.ts](client/src/api.ts)) : `onEnter`, `onMessage`, `onFrame`, `onExit`, `colliders` (les boîtes de collision du joueur local).
-4. Ajoute une ligne dans chacun des trois registres : [games/registry.ts](games/registry.ts), [games/registry.server.ts](games/registry.server.ts), [games/registry.client.ts](games/registry.client.ts).
+1. Écris sa fiche (nom, description, réglages : chaque réglage déclare son type, sa valeur par défaut et ses bornes — le lobby génère le formulaire tout seul) dans [godot/server/metas.gd](godot/server/metas.gd), et la même dans `games/<id>/shared.ts` + [games/registry.ts](games/registry.ts) (les tests de parité vérifient qu'elles sont identiques).
+2. Écris sa partie serveur dans `godot/server/games/<id>_server.gd` : une classe qui hérite de `ServerGame` ([godot/server/server_game.gd](godot/server/server_game.gd)) avec `on_start`, `on_tick`, `on_player_message`, `on_player_leave`, `get_results`, et `bot_tick` si tu veux des bots ; inscris-la dans `GameMetas.create_game`.
+3. Écris sa partie client dans `godot/games/<id>/` (une classe `ClientGame`) et inscris-la dans [godot/core/registry.gd](godot/core/registry.gd).
 
 Le cœur fournit le reste : personnage, caméra, réseau, `ctx.damage()` pour marquer la peau d'un joueur, `ctx.impulse()` pour l'envoyer valser, scores et enchaînement des manches.
 
@@ -95,12 +101,13 @@ Le dépôt contient un serveur MCP déclaré dans [.mcp.json](.mcp.json) : ouvre
 
 Outils disponibles : `list_levels`, `get_level`, `get_element_catalog`, `create_level`, `update_level`, `add_elements`, `remove_elements`, `validate_level`, `preview_level`, `delete_level`.
 
-`validate_level` utilise le schéma et la physique du jeu : il vérifie qu'il y a un départ et une arrivée, que chaque saut est à portée du personnage (avec 15 % de marge) et que les checkpoints s'enchaînent. Un niveau enregistré apparaît dans le lobby sans redémarrer le serveur ; un niveau non terminable n'est jamais proposé en jeu.
+Le MCP écrit dans `godot/levels/parkour/` (la variable `JEUX_LEVELS_DIR` change ce dossier). `validate_level` utilise le schéma et la physique du jeu : il vérifie qu'il y a un départ et une arrivée, que chaque saut est à portée du personnage (avec 15 % de marge) et que les checkpoints s'enchaînent. Un serveur lancé depuis les sources voit un niveau enregistré apparaître dans le lobby sans redémarrer ; un niveau non terminable n'est jamais proposé en jeu. Pour l'exe exporté, les niveaux sont livrés dedans : réexporte après en avoir ajouté, ou dépose les fichiers `.json` dans `%APPDATA%\Godot\app_userdata\Dotabata!\levels\parkour\` (ils s'ajoutent aux niveaux livrés).
 
-On peut aussi écrire les fichiers à la main dans `levels/parkour/` — le format est décrit par `get_element_catalog` et par [shared/src/level.ts](shared/src/level.ts).
+On peut aussi écrire les fichiers à la main — le format est décrit par `get_element_catalog` et par [shared/src/level.ts](shared/src/level.ts).
 
 ## Limites connues
 
-- La physique est maison (capsule contre boîtes). Elle suffit pour ces deux jeux ; un futur jeu qui demanderait de vrais empilements ou des véhicules devra brancher un moteur (Rapier) derrière `shared/src/physics.ts`.
+- La physique est maison (capsule contre boîtes). Elle suffit pour ces deux jeux ; un futur jeu qui demanderait de vrais empilements ou des véhicules devra brancher un vrai moteur.
 - Un joueur qui arrive en cours de partie attend la manche suivante.
 - Les clients sont de confiance (chacun annonce sa propre position) : c'est un jeu entre amis, pas un jeu en ligne compétitif.
+- La version web du jeu ne peut pas héberger de serveur (un navigateur n'ouvre pas de port) : elle rejoint seulement par adresse.

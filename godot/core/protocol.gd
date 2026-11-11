@@ -25,3 +25,9 @@ const HAT_COLOR := {
 const HATS := ["haricot", "casquette", "spaghetti", "hélice", "bouée", "crochet", "bandeau", "arche"]
 const COLORS := [0xf0629a, 0x4a8fe8, 0xffc636, 0x9a6be0, 0x7dc95a, 0xf78a3c, 0x7ccdf2, 0xb08cf0, 0xff4d6d, 0xf8f9fa]
 const MAX_PLAYERS := 10
+## Port du premier serveur d'un PC (WebSocket en TCP, découverte en UDP sur le même numéro) ; les suivants
+## prennent PORT + 1 … PORT + PORT_SPAN - 1.
+const PORT := 3000
+const PORT_SPAN := 10
+## Version du protocole de découverte (les serveurs d'une autre version ne sont pas listés).
+const DISCOVERY_VERSION := 1

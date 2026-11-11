@@ -483,6 +483,36 @@ static func memory_tile_at(e: Dictionary, x: float, z: float) -> int:
 	return row * cols + col
 
 
+## Dalles qui portent la capsule (pieds en x, z) : celle sous les pieds, sinon (joint) toutes celles à moins de r. Serveur.
+static func memory_tiles_under(e: Dictionary, x: float, z: float, r := Phys.RADIUS * 0.9) -> Array:
+	var k := memory_tile_at(e, x, z)
+	if k >= 0:
+		return [k]
+	var yaw: float = e.get("yaw", 0.0)
+	var co := cos(yaw)
+	var si := sin(yaw)
+	var dx: float = x - e["pos"][0]
+	var dz: float = z - e["pos"][2]
+	var size: Array = e["size"]
+	var cols := int(e.get("cols", 3))
+	var rows := int(e.get("rows", 5))
+	var gap: float = e.get("gap", 0.25)
+	var lx: float = dx * co - dz * si + size[0] / 2.0
+	var lz: float = dx * si + dz * co + size[2] / 2.0
+	var pw: float = size[0] / cols
+	var pd: float = size[2] / rows
+	var hx := maxf(0.05, pw / 2.0 - gap / 2.0)
+	var hz := maxf(0.05, pd / 2.0 - gap / 2.0)
+	var out: Array = []
+	for row in rows:
+		for col in cols:
+			var ex := maxf(0.0, absf(lx - (col + 0.5) * pw) - hx)
+			var ez := maxf(0.0, absf(lz - (row + 0.5) * pd) - hz)
+			if ex * ex + ez * ez <= r * r:
+				out.append(row * cols + col)
+	return out
+
+
 ## Les pieds sont-ils posés sur le dessus de l'élément (empreinte tournée, ±0.35 m du dessus) ?
 static func stands_on(e: Dictionary, x: float, y: float, z: float) -> bool:
 	var yaw: float = e.get("yaw", 0.0)

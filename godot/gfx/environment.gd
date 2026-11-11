@@ -106,8 +106,10 @@ func apply_quality(q: int) -> void:
 	_cam_attr.dof_blur_far_transition = 120.0
 	_cam_attr.dof_blur_amount = 0.05
 	var vp := get_viewport()
-	vp.msaa_3d = Viewport.MSAA_2X if q >= 2 else Viewport.MSAA_DISABLED
-	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if q == 1 and forward_plus else Viewport.SCREEN_SPACE_AA_DISABLED
+	# MSAA + occlusion ambiante / reflets écran noircit l'image par blocs avec les vieux pilotes Radeon : FXAA à la place
+	var msaa := q >= 2 and not (full and Config.msaa_breaks_screen_fx())
+	vp.msaa_3d = Viewport.MSAA_2X if msaa else Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if q >= 1 and forward_plus and not msaa else Viewport.SCREEN_SPACE_AA_DISABLED
 	if Config.args.has("scale"):
 		vp.scaling_3d_scale = float(Config.args["scale"])
 	var plane := PlaneMesh.new()

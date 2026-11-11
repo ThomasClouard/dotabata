@@ -1,6 +1,6 @@
 class_name GameUI
 extends CanvasLayer
-## Interface par-dessus le jeu : écran de connexion, panneau du lobby (formulaire généré depuis les réglages
+## Interface par-dessus le jeu : accueil (liste des serveurs, création), panneau du lobby (formulaire généré depuis les réglages
 ## déclarés par chaque jeu), bandeau de manche, toasts, scores, podium. Portage de client/src/ui.ts.
 
 signal profile_changed(p: Dictionary)
@@ -10,7 +10,13 @@ signal start_pressed
 signal stop_pressed
 signal to_lobby_pressed
 signal quality_toggled
-signal connect_requested(address: String)
+## Accueil : rejoindre un serveur (mot de passe "" si aucun), en créer un ; quitter / fermer le serveur.
+signal join_requested(address: String, password: String)
+signal create_requested(cfg: Dictionary)
+signal menu_profile_changed(p: Dictionary)
+signal leave_pressed
+## Hôte : réglages du serveur modifiés ({name, max, password}).
+signal server_cfg_changed(cfg: Dictionary)
 
 var splash: Control  # écran de chargement (libéré une fois effacé)
 var root := Control.new()
@@ -19,6 +25,8 @@ var lobby := PanelContainer.new()
 var overlay := ColorRect.new()
 var wait: PanelContainer
 var stop: Button
+var leave: Button
+var server_btn: Button
 var corner: Label
 
 var _lobby_box := VBoxContainer.new()
@@ -33,6 +41,9 @@ var _toast_tween: Tween
 var _pending: Variant = null
 var _pending_id := ""
 var _waiting_focus := false
+var _menu_list: VBoxContainer  # liste des serveurs de l'accueil (mise à jour sans reconstruire l'écran)
+var _menu_hint: Label
+var _server_form: Dictionary = {}  # réglages du serveur connus de l'hôte (vide = on n'héberge pas)
 
 
 func _ready() -> void:
@@ -99,14 +110,21 @@ func _ready() -> void:
 	wait.visible = false
 	root.add_child(wait)
 
+	# boutons en bas à droite pendant une partie : réglages du serveur et arrêt (hôte), quitter (tous)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	actions.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	actions.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	actions.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	actions.offset_right = -12
+	actions.offset_bottom = -14
+	server_btn = UI.button("Réglages du serveur", "small", func() -> void: show_server_settings())
 	stop = UI.button("Arrêter la partie", "small", func() -> void: stop_pressed.emit())
-	stop.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	stop.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	stop.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	stop.offset_right = -12
-	stop.offset_bottom = -14
-	stop.visible = false
-	root.add_child(stop)
+	leave = UI.button("Quitter", "small", func() -> void: leave_pressed.emit())
+	for b: Button in [server_btn, stop, leave]:
+		b.visible = false
+		actions.add_child(b)
+	root.add_child(actions)
 
 	# voile sombre + carte centrale (scores, connexion)
 	overlay.color = Color(UI.INK.r, UI.INK.g, UI.INK.b, 0.35)
@@ -218,25 +236,6 @@ func hide_overlay() -> void:
 	overlay.visible = false
 
 
-func show_connect(address: String, error := "", busy := false) -> void:
-	dismiss_splash()  # après sa durée minimale : l'écran de connexion reste visible si le serveur tarde
-	var edit := LineEdit.new()
-	edit.text = address
-	edit.placeholder_text = "adresse:port, par exemple 192.168.1.20:3000"
-	var go := func() -> void: connect_requested.emit(edit.text.strip_edges())
-	edit.text_submitted.connect(func(_t: String) -> void: go.call())
-	var btn := UI.button("Connexion en cours…" if busy else "Se connecter", "big", go)
-	btn.disabled = busy
-	edit.editable = not busy
-	var kids: Array = [UI.h1("Dotabata!"), UI.label("Adresse du serveur de jeu"), edit, btn]
-	if error != "":
-		var e := UI.label(error, 14, UI.ACCENT)
-		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		kids.append(e)
-	kids.append(UI.small("Le serveur est celui du jeu d'origine : lance « npm run serve » dans le dossier du jeu, puis indique ici l'adresse affichée (port 3000 par défaut)."))
-	_fill_overlay(kids)
-
-
 func show_message(title: String, text: String, button := "", action: Callable = Callable()) -> void:
 	dismiss_splash()
 	var t := UI.label(text, 15)
@@ -245,6 +244,227 @@ func show_message(title: String, text: String, button := "", action: Callable = 
 	if button != "":
 		kids.append(UI.button(button, "big", action))
 	_fill_overlay(kids)
+
+
+## Message avec deux choix (confirmation).
+func show_confirm(title: String, text: String, yes: String, on_yes: Callable, no: String, on_no: Callable) -> void:
+	dismiss_splash()
+	var t := UI.label(text, 15)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(UI.button(yes, "big", on_yes))
+	row.add_child(UI.button(no, "", on_no))
+	_fill_overlay([UI.h1(title), t, row])
+
+
+# ---------- accueil : profil, serveurs du réseau local, création ----------
+
+## Écran d'accueil. can_host : création de serveur possible (pas sur le web) ; scanning : découverte active.
+func show_menu(profile: Dictionary, last_address: String, can_host: bool, scanning: bool, error := "") -> void:
+	dismiss_splash()
+	var kids: Array = [UI.h1("Dotabata!")]
+	if error != "":
+		var e := UI.label(error, 14, UI.ACCENT)
+		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		kids.append(e)
+	# profil : pseudo et personnage, gardés pour la partie
+	var name_edit := LineEdit.new()
+	name_edit.text = profile["name"]
+	name_edit.max_length = 16
+	name_edit.custom_minimum_size.x = 170
+	var cur := profile.duplicate()
+	var push_name := func() -> void:
+		if name_edit.text.strip_edges() != "" and name_edit.text.strip_edges() != cur["name"]:
+			cur["name"] = name_edit.text.strip_edges()
+			menu_profile_changed.emit(cur.duplicate())
+	name_edit.text_submitted.connect(func(_t: String) -> void: name_edit.release_focus())
+	name_edit.focus_exited.connect(push_name)
+	kids.append(UI.row("Pseudo", [name_edit]))
+	var hats := UI.flow()
+	_fill_hats(hats, cur)
+	kids.append(hats)
+
+	kids.append(UI.h2("Serveurs du réseau local"))
+	_menu_list = VBoxContainer.new()
+	_menu_list.add_theme_constant_override("separation", 4)
+	kids.append(_menu_list)
+	_menu_hint = UI.small("Recherche des serveurs…" if scanning else "La recherche automatique n'est pas disponible ici : indique l'adresse du serveur.")
+	_menu_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	kids.append(_menu_hint)
+	if can_host:
+		kids.append(UI.button("Créer un serveur", "big", func() -> void:
+			push_name.call()
+			show_create(Config.server_cfg, cur["name"])))
+	# adresse manuelle (autre sous-réseau, VPN…)
+	var addr := LineEdit.new()
+	addr.text = last_address
+	addr.placeholder_text = "adresse:port, par exemple 192.168.1.20:%d" % Protocol.PORT
+	addr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var go := func() -> void:
+		push_name.call()
+		if addr.text.strip_edges() != "":
+			join_requested.emit(addr.text.strip_edges(), "")
+	addr.text_submitted.connect(func(_t: String) -> void: go.call())
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 8)
+	line.add_child(addr)
+	line.add_child(UI.button("Rejoindre", "small", go))
+	kids.append(UI.label("Ou rejoindre par adresse", 14))
+	kids.append(line)
+	_fill_overlay(kids)
+
+
+## Boutons de personnage de l'accueil (reconstruits à chaque choix pour déplacer la sélection).
+func _fill_hats(flow: HFlowContainer, cur: Dictionary) -> void:
+	for c in flow.get_children():
+		flow.remove_child(c)
+		c.queue_free()
+	for hat: String in Protocol.HATS:
+		var hb := UI.button(hat, "small", func() -> void:
+			cur["hat"] = hat
+			cur["color"] = Protocol.HAT_COLOR[hat]
+			menu_profile_changed.emit(cur.duplicate())
+			_fill_hats.call_deferred(flow, cur))
+		hb.tooltip_text = "Personnage"
+		if hat == cur["hat"]:
+			UI.mark_selected(hb)
+		flow.add_child(hb)
+
+
+## Met à jour la liste des serveurs de l'accueil (sans toucher aux champs en cours de saisie).
+func update_menu(servers: Array) -> void:
+	if not is_instance_valid(_menu_list) or not overlay.visible:
+		return
+	for c in _menu_list.get_children():
+		_menu_list.remove_child(c)
+		c.queue_free()
+	if is_instance_valid(_menu_hint):
+		_menu_hint.text = "Aucun serveur trouvé pour l'instant : crée le tien, ou rejoins par adresse." if servers.is_empty() else "Les serveurs du réseau local apparaissent ici tout seuls."
+	for s: Dictionary in servers:
+		var full: bool = s["players"] >= s["max"]
+		var info := "%d/%d joueurs" % [s["players"], s["max"]]
+		if s["bots"] > 0:
+			info += " + %d bot%s" % [s["bots"], "s" if s["bots"] > 1 else ""]
+		if s["phase"] != "lobby":
+			info += " · en partie"
+		if s["locked"]:
+			info += " · mot de passe"
+		info += " · %d ms" % roundi(s["ping"] * 1000.0)
+		var v := VBoxContainer.new()
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var title := UI.label(s["name"], 16)
+		title.clip_text = true
+		title.custom_minimum_size.x = 260
+		v.add_child(title)
+		v.add_child(UI.small("%s — %s" % [info, s["address"]]))
+		var join := UI.button("Complet" if full else "Rejoindre", "small", func() -> void:
+			if s["locked"]:
+				show_password(s["address"], s["name"])
+			else:
+				join_requested.emit(s["address"], ""))
+		join.disabled = full
+		_menu_list.add_child(_table_row([v, join], false))
+
+
+## Demande le mot de passe d'un serveur.
+func show_password(address: String, server_name: String, error := "") -> void:
+	dismiss_splash()
+	var edit := LineEdit.new()
+	edit.secret = true
+	edit.placeholder_text = "mot de passe"
+	var go := func() -> void: join_requested.emit(address, edit.text)
+	edit.text_submitted.connect(func(_t: String) -> void: go.call())
+	var kids: Array = [UI.h1(server_name), UI.label("Ce serveur demande un mot de passe.")]
+	if error != "":
+		kids.append(UI.label(error, 14, UI.ACCENT))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(UI.button("Rejoindre", "big", go))
+	row.add_child(UI.button("Retour", "", func() -> void: leave_pressed.emit()))
+	kids.append_array([edit, row])
+	_fill_overlay(kids)
+	edit.grab_focus.call_deferred()
+
+
+## Champs des réglages du serveur ; on_change reçoit {name, max, password} à chaque validation.
+func _server_fields(cfg: Dictionary, on_change: Callable) -> Array:
+	var cur := [cfg.duplicate()]  # boîte : les fonctions anonymes capturent par valeur
+	var name_edit := LineEdit.new()
+	name_edit.text = cfg["name"]
+	name_edit.max_length = 32
+	name_edit.custom_minimum_size.x = 190
+	var pw := LineEdit.new()
+	pw.text = cfg["password"]
+	pw.max_length = 32
+	pw.secret = true
+	pw.placeholder_text = "aucun"
+	pw.custom_minimum_size.x = 150
+	var commit := func() -> void:
+		var next := {"name": name_edit.text.strip_edges(), "max": cur[0]["max"], "password": pw.text}
+		if next != cur[0]:
+			cur[0] = next
+			on_change.call(next.duplicate())
+	for e: LineEdit in [name_edit, pw]:
+		e.text_submitted.connect(func(_t: String) -> void: e.release_focus())
+		e.focus_exited.connect(commit)
+	var mx := _num(cfg["max"], 2, Protocol.MAX_PLAYERS, 1, true, func(v: float) -> void:
+		cur[0]["max"] = int(v)
+		on_change.call(cur[0].duplicate()))
+	var show_pw := CheckBox.new()
+	show_pw.text = "voir"
+	show_pw.focus_mode = Control.FOCUS_NONE
+	show_pw.toggled.connect(func(on: bool) -> void: pw.secret = not on)
+	return [UI.row("Nom du serveur", [name_edit]), UI.row("Joueurs max", [mx]), UI.row("Mot de passe", [pw, show_pw])]
+
+
+## Formulaire de création de serveur.
+func show_create(cfg: Dictionary, player_name: String) -> void:
+	var cur := [cfg.duplicate()]
+	if str(cur[0].get("name", "")) == "":
+		cur[0]["name"] = "Partie de %s" % player_name
+	var kids: Array = [UI.h1("Créer un serveur")]
+	kids.append_array(_server_fields(cur[0], func(next: Dictionary) -> void: cur[0] = next))
+	var hint := UI.small("Les joueurs du réseau local verront ton serveur dans leur liste. Tout reste modifiable depuis le lobby, même quand des joueurs sont connectés.")
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	kids.append(hint)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(UI.button("Créer", "big", func() -> void:
+		var f := get_viewport().gui_get_focus_owner()
+		if f:
+			f.release_focus()  # valide le champ en cours de saisie
+		(func() -> void: create_requested.emit(cur[0])).call_deferred()))
+	row.add_child(UI.button("Retour", "", func() -> void: leave_pressed.emit()))
+	kids.append(row)
+	_fill_overlay(kids)
+
+
+## Réglages du serveur pendant une partie (hôte), dans le voile central.
+func show_server_settings() -> void:
+	if _server_form.is_empty():
+		return
+	var kids: Array = [UI.h1("Réglages du serveur")]
+	kids.append_array(_server_fields(_server_form, _on_server_form))
+	var hint := UI.small("Ils s'appliquent tout de suite, sans interrompre la manche. Les réglages de la partie se changent au lobby.")
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	kids.append(hint)
+	kids.append(UI.button("Fermer", "big", func() -> void:
+		var f := get_viewport().gui_get_focus_owner()
+		if f:
+			f.release_focus()
+		hide_overlay.call_deferred()))
+	_fill_overlay(kids)
+
+
+func _on_server_form(next: Dictionary) -> void:
+	_server_form = next
+	server_cfg_changed.emit(next)
+
+
+## Réglages du serveur connus de l'hôte (le mot de passe ne circule pas : il vient du PC de l'hôte). {} = pas hôte.
+func set_server_form(cfg: Dictionary) -> void:
+	_server_form = cfg.duplicate()
 
 
 static func _rank_label(i: int) -> Label:
@@ -404,7 +624,8 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	var my_hat: String = me["hat"]
 	var my_name: String = me["name"]
 
-	box.add_child(UI.h1("Dotabata!"))
+	var srv: Dictionary = m.get("server", {})
+	box.add_child(UI.h1(str(srv.get("name", "Dotabata!"))))
 	var name_edit := LineEdit.new()
 	name_edit.text = my_name
 	name_edit.max_length = 16
@@ -440,7 +661,8 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	box.add_child(hats)
 
 	var players: Array = m["players"]
-	box.add_child(UI.h2("Joueurs (%d/%d)" % [players.size(), Protocol.MAX_PLAYERS]))
+	var humans := players.filter(func(p: Dictionary) -> bool: return not p["isBot"]).size()
+	box.add_child(UI.h2("Joueurs (%d/%d)" % [humans, int(srv.get("max", Protocol.MAX_PLAYERS))]))
 	var bots := 0
 	for p: Dictionary in players:
 		var tags := ""
@@ -461,6 +683,13 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 			UI.button("−", "small", func() -> void: bots_changed.emit(bots - 1)),
 			UI.label(str(bots), 15),
 			UI.button("+", "small", func() -> void: bots_changed.emit(bots + 1))]))
+
+	if host and not _server_form.is_empty():
+		box.add_child(UI.h2("Serveur"))
+		for c: Control in _server_fields(_server_form, _on_server_form):
+			box.add_child(c)
+	elif srv.get("locked", false):
+		box.add_child(UI.small("Serveur protégé par un mot de passe."))
 
 	box.add_child(UI.h2("Réglages de la partie" if host else "Réglages (choisis par l'hôte)"))
 	box.add_child(UI.row("Nombre de manches", [_num(s["rounds"], 1, 15, 1, host, func(v: float) -> void:
@@ -555,9 +784,12 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 		box.add_child(UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit()))
 	else:
 		box.add_child(UI.small("En attente du lancement par l'hôte… Entraîne-toi sur le terrain !"))
+	box.add_child(UI.button("Fermer le serveur" if not _server_form.is_empty() else "Quitter le serveur", "small", func() -> void: leave_pressed.emit()))
 	var urls: Array = m["urls"]
-	if not urls.is_empty():
-		box.add_child(UI.small("Adresse du jeu dans un navigateur : %s" % "  ou  ".join(PackedStringArray(urls))))
+	if not _server_form.is_empty() and not urls.is_empty():
+		var u := UI.small("Les joueurs du réseau local voient ce serveur dans leur liste. Sinon, adresse à saisir : %s" % "  ou  ".join(PackedStringArray(urls)))
+		u.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(u)
 	box.add_child(UI.small("Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le jeu pour la capturer, Échap pour la libérer) · Flèches : caméra au clavier"))
 	box.add_child(UI.row("Graphismes : %s" % Config.QUALITY_NAMES[Config.quality], [
 		UI.button("Passer en %s" % Config.QUALITY_NAMES[(Config.quality + 1) % 3], "small", func() -> void: quality_toggled.emit())]))

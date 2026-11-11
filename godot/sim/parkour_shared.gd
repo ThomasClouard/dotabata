@@ -173,6 +173,13 @@ static func post_step(b: Phys.Body, contacts: Array) -> Dictionary:
 # —— vague 3 : interactions, objets, pièces ——
 
 const ITEMS := ["super", "shield", "banana", "glove"]
+## Réglages des objets et des interactions (serveur ; durées en secondes, distances en mètres).
+const ITEM := {
+	"superTime": 8.0, "shieldTime": 6.0,
+	"bananaBack": 1.2, "bananaArm": 0.6, "bananaR": 0.7, "bananaLife": 60.0,
+	"slipSpeed": 9.0, "slipUp": 4.0, "slipTumble": 1.3,
+	"gloveRange": 3.5, "gloveDot": 0.4, "gloveV": 13.0, "gloveUp": 6.0, "gloveTumble": 1.1,
+}
 const ITEM_NAMES := {"super": "Super saut", "shield": "Bouclier", "banana": "Banane", "glove": "Gant de boxe"}
 
 

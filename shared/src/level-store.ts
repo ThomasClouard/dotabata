@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { LevelSchema, type Level } from './level';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const LEVELS_DIR = process.env.JEUX_LEVELS_DIR ?? path.join(ROOT, 'levels', 'parkour');
+export const LEVELS_DIR = process.env.JEUX_LEVELS_DIR ?? path.join(ROOT, 'godot', 'levels', 'parkour');
 
 const NAME = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 function fileOf(name: string): string {

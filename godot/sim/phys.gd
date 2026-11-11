@@ -132,6 +132,21 @@ static func jump_height(v0 := JUMP_V, g := GRAVITY) -> float:
 	return (v0 * v0) / (2.0 * g)
 
 
+## Distance horizontale atteignable en sautant vers une surface `dh` plus haut (négatif = plus bas). -1 si trop haut.
+static func jump_reach(dh: float, v0 := JUMP_V, speed := SPEED, g := GRAVITY) -> float:
+	var disc := v0 * v0 - 2.0 * g * dh
+	if disc < 0.0:
+		return -1.0
+	return (speed * (v0 + sqrt(disc))) / g
+
+
+## Corps neuf posé en (x, y, z) (makeBody du TS).
+static func make_body(x: float, y: float, z: float) -> Body:
+	var b := Body.new()
+	b.set_pos(x, y, z)
+	return b
+
+
 ## Annule les états temporaires (tyrolienne, vol, élan, sol spécial) : à chaque réapparition.
 static func clear_motion_state(b: Body) -> void:
 	b.zip = -1

@@ -1,4 +1,4 @@
-; Client Godot de « Dotabata! » — se connecte au serveur Node d'origine (même protocole WebSocket).
+; Dotabata! — party game LAN : chaque exe peut héberger un serveur (godot/server/) ou rejoindre celui d'un autre.
 config_version=5
 
 [application]

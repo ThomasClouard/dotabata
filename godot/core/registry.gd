@@ -1,6 +1,6 @@
 class_name Registry
 extends RefCounted
-## Registre client des mini-jeux (équivalent de games/registry.client.ts).
+## Registre client des mini-jeux (leur fiche et leur partie serveur sont dans server/metas.gd).
 
 
 static func create(game_id: String) -> ClientGame:

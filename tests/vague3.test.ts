@@ -1,20 +1,17 @@
-// Vague 3 : bousculades, portes / trappes, dalles mémoire, objets, pièces, relais d'effets — logique serveur et fonctions partagées.
+// Vague 3 : bousculades, portes / trappes, dalles mémoire, objets, pièces — fonctions partagées (la logique serveur
+// est testée côté Godot : godot/tests/run_server_tests.gd).
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
-import type { ServerCtx, ServerPlayer } from '../shared/src/game-api';
+import { describe, expect, it } from 'vitest';
 import {
   ElementSchema, LevelSchema, buildColliders, doorOpenness, elementCatalog, linkOpen, memoryKey, memoryTileAt, memoryTiles, memoryTilesUnder, newLevelState,
   type El, type LevelInput,
 } from '../shared/src/level';
 import { PHYS, jostle, jumpHeight, makeBody, stepBody, type Contact, type Vec3 } from '../shared/src/physics';
 import { FLAG, poseFlags } from '../shared/src/protocol';
-import { defaultGameSettings } from '../shared/src/scoring';
 import { applyEffectMsg, applyLevelMsg, memoryLayout, parkourJostle, parkourMeta, parkourPostStep } from '../games/parkour/shared';
-import { simulate } from './sim';
 
 process.env.JEUX_LEVELS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'parkour');
-const { parkourServer } = await import('../games/parkour/server');
 const { readLevel } = await import('../shared/src/level-store');
 const { validateLevel } = await import('../shared/src/level-validate');
 
@@ -166,202 +163,7 @@ describe('vague 3 — physique : bousculade, super saut, bouclier, pose', () => 
   });
 });
 
-// ———— logique serveur avec de faux joueurs (positions et drapeaux posés à la main, comme l'état réseau 30 Hz) ————
-function server(settings: Record<string, any> = {}, n = 2) {
-  let t = 0;
-  const players = new Map<string, ServerPlayer>();
-  for (let i = 0; i < n; i++) players.set(`p${i}`, { id: `p${i}`, name: `J${i}`, isBot: false, p: [0, 0, 0], v: [0, 0, 0], yaw: 0, flags: FLAG.grounded });
-  const log: any[] = [], impulses: { id: string; v: Vec3; tumble: number }[] = [];
-  const ctx: ServerCtx = {
-    players, startAt: 1, now: () => t,
-    settings: { ...defaultGameSettings(parkourMeta), duration: 200, hurry: 200, levels: ['vague3'], ...settings },
-    broadcast: (m) => log.push({ ...m, at: t }), send: () => {}, damage: () => {}, heal: () => {},
-    impulse: (id, v, tumble) => impulses.push({ id, v, tumble }), teleport: () => {}, end: () => {},
-  };
-  const game = parkourServer.create(ctx);
-  const { init } = game.onStart();
-  const level = init.level as ReturnType<typeof readLevel>;
-  const idx = (id: string) => level.elements.findIndex((e) => e.id === id);
-  const put = (id: string, p: Vec3, extra: Partial<ServerPlayer> = {}) => Object.assign(players.get(id)!, { p, flags: FLAG.grounded, v: [0, 0, 0] }, extra);
-  const tick = (to: number) => { while (t < to - 1e-9) { t = Math.round((t + 1 / 30) * 1e6) / 1e6; game.onTick(1 / 30); } };
-  return { game, init, level, idx, put, tick, log, impulses, players, now: () => t, of: (ty: string) => log.filter((m) => m.t === ty) };
-}
-
-describe('vague 3 — serveur autoritaire', () => {
-  it('bouton → ouverture diffusée (prolongée, sans spam) ; levier avec recharge', () => {
-    const s = server();
-    expect(s.init.jostle).toBe(true);
-    s.tick(2);
-    const btn = s.level.elements[s.idx('bouton')];
-    s.put('p0', [btn.pos[0], btn.pos[1] + btn.size[1] / 2, btn.pos[2]]);
-    s.tick(2.5);
-    const opens = s.of('open');
-    expect(opens.length).toBe(1);
-    expect(opens[0]).toMatchObject({ link: 'porte1', by: s.idx('bouton') });
-    expect(opens[0].until - opens[0].at).toBeCloseTo(8, 6);
-    s.tick(4.5); // toujours dessus : prolongation seulement quand il reste < 7.5 s
-    expect(s.of('open').length).toBeGreaterThan(1);
-    expect(s.of('open').length).toBeLessThan(10);
-    s.put('p0', [0, 0, 0]);
-    const lv = s.level.elements[s.idx('levier')];
-    s.put('p1', [lv.pos[0], lv.pos[1] - 1, lv.pos[2]]);
-    s.tick(5);
-    s.tick(9);
-    expect(s.of('lever').length).toBe(1); // recharge de 8 s
-    expect(s.of('open').filter((m) => m.link === 'trappe').length).toBe(1);
-    s.tick(13.2);
-    expect(s.of('lever').length).toBe(2);
-  });
-
-  it('dalles mémoire : piégée → tombe pour tous et reste tombée ; sûre → révélée ; disposition jamais envoyée', () => {
-    const s = server();
-    expect(Object.keys(s.init).sort()).toEqual(['coins', 'cps', 'endAt', 'jostle', 'level']); // aucune disposition
-    s.tick(2);
-    const i = s.idx('memoire'), e = s.level.elements[i] as El<'memory'>;
-    const tiles = memoryTiles(e);
-    tiles.forEach((tile, k) => { s.put('p0', [tile.c[0], tile.c[1] + tile.h[1], tile.c[2]]); s.tick(2 + (k + 1) * 0.1); });
-    const fell = s.of('tile').map((m) => m.k), safe = s.of('safe').map((m) => m.k);
-    expect(fell.length + safe.length).toBe(12);
-    expect(new Set([...fell, ...safe]).size).toBe(12);
-    expect(safe.length).toBeGreaterThanOrEqual(e.rows);
-    // la même dalle n'est jamais rediffusée
-    s.put('p1', [tiles[fell[0]].c[0], tiles[fell[0]].c[1] + tiles[fell[0]].h[1], tiles[fell[0]].c[2]]);
-    s.tick(5);
-    expect(s.of('tile').length).toBe(fell.length);
-    // en l'air (pas grounded) : rien
-  });
-
-  it('boîte surprise, objets (super saut, bouclier, gant, banane) et pièces', () => {
-    const s = server({}, 3);
-    s.tick(2);
-    const bi = s.idx('boite1'), box = s.level.elements[bi];
-    const r = { super: 0.05, shield: 0.3, banana: 0.55, glove: 0.8 } as const;
-    /** id prend la boîte (tirage forcé) dès qu'elle est revenue. */
-    const grab = (id: string, kind: keyof typeof r) => {
-      const n = s.of('box').length;
-      const spy = vi.spyOn(Math, 'random').mockReturnValue(r[kind]);
-      s.put(id, [box.pos[0], box.pos[1] - 0.9, box.pos[2]]);
-      for (let k = 0; k < 200 && s.of('box').length === n; k++) s.tick(s.now() + 1 / 30);
-      spy.mockRestore();
-      expect(s.of('item').pop()).toEqual(expect.objectContaining({ id, kind }));
-      s.put(id, [5, 0, 30]);
-    };
-    grab('p0', 'super');
-    // la boîte est absente pendant `respawn` s, et on ne prend rien en tenant déjà un objet
-    s.put('p1', [box.pos[0], box.pos[1] - 0.9, box.pos[2]]);
-    s.tick(s.now() + 1);
-    expect(s.of('item').length).toBe(1);
-    s.put('p1', [5, 0, 31]);
-    s.game.onPlayerMessage('p0', { t: 'use' });
-    expect(s.of('item').pop()).toEqual(expect.objectContaining({ id: 'p0', kind: null }));
-    expect(s.of('effect').pop()).toEqual(expect.objectContaining({ id: 'p0', kind: 'super' }));
-    expect(s.of('effect')[0].until - s.now()).toBeCloseTo(8, 6);
-    grab('p1', 'shield');
-    s.game.onPlayerMessage('p1', { t: 'use' });
-    // gant : p1 (bouclier) et p2 devant p0 ; seul p2 est frappé
-    grab('p0', 'glove');
-    s.put('p0', [0, 0, 24], { yaw: 0 });
-    s.put('p1', [0, 0, 26]);
-    s.put('p2', [0.5, 0, 25.5]);
-    s.game.onPlayerMessage('p0', { t: 'use' });
-    expect(s.of('glove').pop().hit).toEqual(['p2']);
-    expect(s.impulses.map((x) => x.id)).toEqual(['p2']);
-    expect(s.impulses[0].v[2]).toBeGreaterThan(9);
-    // banane : derrière p0, armée après 0.6 s, fait glisser le premier qui passe puis disparaît
-    s.put('p1', [9, 0, 30]); s.put('p2', [9, 0, 31]);
-    grab('p0', 'banana');
-    s.put('p0', [0, 0, 24], { yaw: 0 });
-    s.game.onPlayerMessage('p0', { t: 'use' });
-    const ban = s.of('banana').pop();
-    expect(ban.p).toEqual([0, 0, 24 - 1.2]);
-    s.put('p0', [5, 0, 30]);
-    s.put('p2', [0, 0, 22.9], { v: [0, 0, 5] });
-    s.tick(s.now() + 0.3);
-    expect(s.of('bananaGone').length).toBe(0);
-    s.tick(s.now() + 0.5);
-    expect(s.of('bananaGone').pop()).toEqual(expect.objectContaining({ k: ban.k, by: 'p2' }));
-    const slip = s.impulses.pop()!;
-    expect(slip.id).toBe('p2');
-    expect(slip.v[2]).toBeCloseTo(9, 6);
-    // pièce : une fois par joueur, compteur
-    const coin = s.level.elements[1];
-    for (const id of ['p0', 'p0', 'p1']) { s.put(id, [coin.pos[0], 0, coin.pos[2]]); s.tick(s.now() + 0.2); s.put(id, [9, 0, 9]); }
-    expect(s.of('coin').filter((m) => m.i === 1).map((m) => `${m.id}:${m.n}`)).toEqual(['p0:1', 'p1:1']);
-  });
-
-  it('grille mémoire : marcher dans un joint déclenche les dalles qui portent la capsule (relecture n° 1)', () => {
-    const s = server();
-    s.tick(2);
-    const i = s.idx('memoire'), e = s.level.elements[i] as El<'memory'>;
-    const tiles = memoryTiles(e), top = e.pos[1] + e.size[1] / 2;
-    // joint entre les colonnes 0 et 1 (x = −1 pour une grille de 6 m sur 3 colonnes), au milieu de la rangée 1
-    const zRow1 = tiles[e.cols].c[2];
-    expect(memoryTileAt(e, [-1, top, zRow1])).toBe(-1);
-    expect(memoryTilesUnder(e, [-1, top, zRow1]).sort()).toEqual([e.cols, e.cols + 1]);
-    // sur une dalle (même près du bord) : seulement elle
-    expect(memoryTilesUnder(e, [-1.2, top, zRow1])).toEqual([e.cols]);
-    // à la croisée de 4 dalles : les 4
-    const zJoint = (tiles[0].c[2] + tiles[e.cols].c[2]) / 2;
-    expect(memoryTilesUnder(e, [-1, top, zJoint]).length).toBe(4);
-    // traversée complète en suivant le joint : chaque rangée réagit (piège qui tombe ou dalle révélée)
-    for (let z = e.pos[2] - e.size[2] / 2 + 0.2; z < e.pos[2] + e.size[2] / 2; z += 0.25) { s.put('p0', [-1, top, z]); s.tick(s.now() + 1 / 30); }
-    const touched = new Set([...s.of('tile'), ...s.of('safe')].map((m) => m.k));
-    for (let row = 0; row < e.rows; row++) expect(touched.has(row * e.cols) && touched.has(row * e.cols + 1), `rangée ${row}`).toBe(true);
-  });
-
-  it('banane au sol, gardée au-dessus du vide ; joueurs partis ignorés (relecture n° 2 et 3)', () => {
-    const s = server({}, 3);
-    s.tick(2);
-    const box = s.level.elements[s.idx('boite1')];
-    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.55); // banane
-    s.put('p0', [box.pos[0], box.pos[1] - 0.9, box.pos[2]]);
-    s.tick(s.now() + 0.1);
-    spy.mockRestore();
-    expect(s.of('item').pop()).toEqual(expect.objectContaining({ id: 'p0', kind: 'banana' }));
-    // au-dessus du vide (entre deux plateformes, rien dessous) : rien n'est posé, on garde l'objet
-    s.put('p0', [0, 0, 29.5], { yaw: 0 });
-    s.game.onPlayerMessage('p0', { t: 'use' });
-    expect(s.of('banana').length).toBe(0);
-    expect(s.of('item').pop().kind).toBe('banana');
-    // en plein saut au-dessus d'une plateforme : posée sur le sol, pas en l'air
-    s.put('p0', [0, 1.5, 25], { yaw: 0 });
-    s.game.onPlayerMessage('p0', { t: 'use' });
-    const ban = s.of('banana').pop();
-    expect(ban.p[1]).toBeCloseTo(0, 6);
-    // un joueur parti (encore dans ctx.players) n'écrase pas la banane
-    s.put('p0', [5, 0, 30]);
-    s.put('p2', [ban.p[0], ban.p[1], ban.p[2]]);
-    s.game.onPlayerLeave('p2');
-    s.tick(s.now() + 1.5);
-    expect(s.of('bananaGone').length).toBe(0);
-  });
-
-  it('mort dans un hazard relayée à tous ; classement départagé par les pièces selon le réglage', () => {
-    const s = server();
-    s.tick(2);
-    const lava = s.level.elements.findIndex((e) => e.type === 'hazard');
-    s.game.onPlayerMessage('p0', { t: 'killed', i: lava });
-    s.game.onPlayerMessage('p0', { t: 'killed', i: lava }); // anti-spam
-    s.game.onPlayerMessage('p1', { t: 'killed', i: 0 }); // pas un hazard
-    expect(s.of('killed').map((m) => m.id)).toEqual(['p0']);
-    // même checkpoint, p1 a une pièce : devant même s'il est plus loin
-    const coin = s.level.elements[1];
-    s.put('p1', [coin.pos[0], 0, coin.pos[2]]);
-    s.tick(2.2);
-    s.put('p0', [0, 0, 4]); s.put('p1', [0, 0, -4]);
-    expect(s.game.getResults().map((r) => r.id)).toEqual(['p1', 'p0']);
-    expect(s.game.getResults()[0].label).toMatch(/1 pièce$/);
-    const s2 = server({ coins: false, jostle: false });
-    expect(s2.init.jostle).toBe(false);
-    s2.tick(2);
-    s2.put('p1', [coin.pos[0], 0, coin.pos[2]]);
-    s2.tick(2.2);
-    s2.put('p0', [0, 0, 4]); s2.put('p1', [0, 0, -4]);
-    expect(s2.game.getResults().map((r) => r.id)).toEqual(['p0', 'p1']);
-  });
-});
-
-describe('vague 3 — niveau d\'essai joué par des bots', () => {
+describe("vague 3 — niveau d'essai", () => {
   it('la fixture contient tous les types et est valide sans avertissement', () => {
     const l = readLevel('vague3');
     for (const ty of ['button', 'door', 'lever', 'trapdoor', 'memory', 'itembox', 'coin']) expect(l.elements.some((e) => e.type === ty), ty).toBe(true);
@@ -369,16 +171,4 @@ describe('vague 3 — niveau d\'essai joué par des bots', () => {
     expect(v.errors).toEqual([]);
     expect(v.warnings).toEqual([]);
   });
-
-  for (const jostleOn of [true, false]) {
-    it(`des bots terminent (bousculades ${jostleOn ? 'activées' : 'désactivées'}) en ouvrant la porte et en traversant la grille`, () => {
-      const settings = { ...defaultGameSettings(parkourMeta), duration: 150, hurry: 150, levels: ['vague3'], jostle: jostleOn };
-      const { log } = simulate(parkourServer, settings, 6, 170);
-      const finished = log.filter((m) => m.t === 'finish');
-      expect(finished.length, JSON.stringify(log.filter((m) => m.t === 'cp').map((c) => c.id + ':' + c.k))).toBeGreaterThanOrEqual(4);
-      expect(log.some((m) => m.t === 'open' && m.link === 'porte1')).toBe(true);
-      expect(log.some((m) => m.t === 'safe')).toBe(true);
-      expect(log.some((m) => m.t === 'coin')).toBe(true);
-    });
-  }
 });

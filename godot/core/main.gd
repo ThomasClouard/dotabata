@@ -59,6 +59,7 @@ func _ready() -> void:
 	Config.load_all()
 	Config.apply_options()
 	UI.init_theme()
+	Cursors.install()
 	add_child(env)
 	add_child(world)
 	add_child(char_layer)

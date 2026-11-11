@@ -135,6 +135,11 @@ changement dans `godot/sim/` ou `godot/server/`.
 ## Exports
 
 Les modèles d'export de Godot doivent être installés (éditeur : Éditeur → Gérer les modèles d'export).
+Sous Windows, `compiler.cmd` à la racine du dépôt fait tout : il trouve Godot dans le PATH ou dans son
+installation winget, installe si besoin les modèles d'export de cette version (`tools/install-templates.ps1`,
+téléchargés depuis les versions officielles de Godot sur GitHub, environ 1,3 Go), importe les ressources puis exporte ;
+`compiler.cmd web` exporte aussi la version web.
+À la main :
 
 ```bash
 godot --headless --path godot --export-release "Windows Desktop" build/windows/Dotabata.exe

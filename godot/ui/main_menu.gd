@@ -419,6 +419,7 @@ func _server_row(s: Dictionary) -> Button:
 	var full: bool = s["players"] >= s["max"]
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_ALL
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.custom_minimum_size = Vector2(0, 78)
 	b.set_meta("address", s["address"])
 	b.set_meta("first", true)
@@ -614,6 +615,7 @@ func _screen_character() -> Control:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	var name_l := Button.new()
 	name_l.focus_mode = Control.FOCUS_ALL
+	name_l.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	name_l.custom_minimum_size = Vector2(260, 0)
 	name_l.add_theme_font_size_override("font_size", 28)
 	for st in ["normal", "hover", "pressed"]:
@@ -647,7 +649,6 @@ func _screen_character() -> Control:
 		elif ev.is_action_pressed("ui_right"):
 			step.call(1)
 			name_l.accept_event())
-	name_l.pressed.connect(func() -> void: step.call(1))
 	var prev := UI.button("◀", "big", func() -> void: step.call(-1))
 	var next := UI.button("▶", "big", func() -> void: step.call(1))
 	row.add_child(prev)
@@ -669,12 +670,20 @@ func _screen_character() -> Control:
 		if n != "" and n != cur["name"]:
 			cur["name"] = n
 			profile_changed.emit(cur.duplicate())
-	name_edit.text_submitted.connect(func(_t: String) -> void:
+	# Entrée (ou clic sur le nom, ou « Valider ») : on garde ce personnage et on revient à l'écran précédent
+	var validate := func() -> void:
 		push_name.call()
-		name_l.grab_focus())
+		_stack.pop_back()
+		sound.emit("checkpoint")
+		_show(_stack[-1], -1)
+	name_l.pressed.connect(validate)
+	name_edit.text_submitted.connect(func(_t: String) -> void: validate.call())
 	name_edit.focus_exited.connect(push_name)
 	v.add_child(UI.row("Pseudo", [name_edit]))
-	v.add_child(UI.small("◀ ▶ pour changer de personnage · glisse dans le décor pour le faire tourner"))
+	var ok := UI.menu_button("Valider", validate, true)
+	ok.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_sounds(ok))
+	v.add_child(UI.small("◀ ▶ pour changer de personnage · Entrée pour valider · glisse dans le décor pour le faire tourner"))
 	name_l.focus_neighbor_bottom = name_l.get_path_to(name_edit)
 	root.add_child(card)
 	return root
@@ -714,6 +723,7 @@ func _screen_options() -> Control:
 		fs.text = "Plein écran"
 		fs.add_theme_font_size_override("font_size", 16)
 		fs.focus_mode = Control.FOCUS_ALL
+		fs.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		fs.button_pressed = Config.fullscreen
 		fs.toggled.connect(func(on: bool) -> void:
 			Config.fullscreen = on

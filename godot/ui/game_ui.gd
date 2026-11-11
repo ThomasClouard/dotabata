@@ -450,6 +450,7 @@ func _check(text: String, on: bool, host: bool, on_toggle: Callable) -> CheckBox
 	cb.button_pressed = on
 	cb.disabled = not host
 	cb.focus_mode = Control.FOCUS_NONE
+	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	cb.toggled.connect(on_toggle)
 	return cb
 

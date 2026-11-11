@@ -20,7 +20,12 @@ Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le
 
 ## Jouer
 
-Sous Windows, `lancer.cmd` à la racine (double-clic) ouvre le jeu : l'exe exporté `godot/build/windows/Dotabata.exe` s'il existe, sinon Godot sur les sources. L'exe exporté se suffit à lui-même : rien d'autre à installer pour jouer.
+Sous Windows, à la racine du dépôt :
+
+- `compiler.cmd` (double-clic) compile le jeu en un seul exe, `godot/build/windows/Dotabata.exe` (`compiler.cmd web` fait aussi la version web). Il faut Godot 4.7 (`winget install GodotEngine.GodotEngine`) ; s'il manque ses modèles d'export, le script propose de les télécharger (environ 1,3 Go, une seule fois). Ferme le jeu avant de recompiler ;
+- `lancer.cmd` (double-clic) ouvre le jeu : l'exe compilé s'il existe, sinon Godot sur les sources.
+
+L'exe compilé se suffit à lui-même : c'est le seul fichier à copier sur les PC des joueurs, rien d'autre à installer pour jouer. Recompile après chaque modification du jeu ou ajout de niveau.
 
 Le menu principal s'ouvre sur l'écran titre, avec ton personnage qui danse dans le décor :
 

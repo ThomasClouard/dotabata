@@ -203,6 +203,7 @@ static func button(text: String, kind := "", on_press: Callable = Callable()) ->
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if kind == "small":
 		for st in ["normal", "hover", "pressed", "disabled"]:
 			var s: StyleBoxFlat = theme.get_stylebox(st, "Button").duplicate()
@@ -232,6 +233,7 @@ static func menu_button(text: String, on_press: Callable = Callable(), accent :=
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_ALL
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.custom_minimum_size = Vector2(320, 0)
 	var base := ACCENT if accent else YELLOW

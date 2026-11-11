@@ -1,7 +1,7 @@
 class_name Session
 extends RefCounted
 ## Cœur du serveur : lobby, enchaînement des manches, scores, relais des états, réglages du serveur.
-## Portage de server/src/session.ts. Ne connaît aucun jeu en particulier (voir GameMetas).
+## Ne connaît aucun jeu en particulier (voir GameMetas).
 ## Le transport (WebSocket) est géré par ServerHost, qui appelle on_hello / on_message / on_close et tick().
 
 const BOT_NAMES := ["Nouille", "Patate", "Cornichon", "Biscotte", "Gnocchi", "Tartine", "Zigoto", "Pompon", "Bidule", "Saucisse"]

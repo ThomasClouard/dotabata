@@ -1,7 +1,7 @@
 class_name Debug
 extends Node
-## Aides au test en ligne de commande (après `--`) ou dans l'URL sur le web :
-##   --bots=9          remplit le lobby de bots (si l'on est l'hôte), comme `?bots=9` du client d'origine
+## Aides au test en ligne de commande (après `--`) :
+##   --bots=9          remplit le lobby de bots (si l'on est l'hôte)
 ##   --autostart       lance la partie dès que les bots sont là
 ##   --games=mortar --rounds=1   restreint les jeux et le nombre de manches (si l'on est l'hôte)
 ##   --set=mortar.buildTime=5,parkour.duration=45   règle des options de jeu (si l'on est l'hôte)

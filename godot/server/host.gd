@@ -2,7 +2,6 @@ class_name ServerHost
 extends Node
 ## Serveur de jeu hébergé dans le client : WebSocket (TCPServer + WebSocketPeer), pas de 30 Hz, et répondeur de
 ## découverte LAN en UDP. Le créateur s'y connecte lui-même en boucle locale, comme n'importe quel joueur.
-## Indisponible sur le web (pas de sockets serveur dans un navigateur).
 
 const TICK := 1.0 / 30.0
 const BUFFER := 1 << 20  # un niveau complet tient dans un seul message

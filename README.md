@@ -28,7 +28,7 @@ Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le
 
 Sous Windows, à la racine du dépôt :
 
-- `compiler.cmd` (double-clic) compile le jeu en un seul exe, `godot/build/windows/Dotabata.exe` (`compiler.cmd web` fait aussi la version web). Il faut Godot 4.7 (`winget install GodotEngine.GodotEngine`) ; s'il manque ses modèles d'export, le script propose de les télécharger (environ 1,3 Go, une seule fois). Ferme le jeu avant de recompiler ;
+- `compiler.cmd` (double-clic) compile le jeu en un seul exe, `godot/build/windows/Dotabata.exe`. Il faut Godot 4.7 (`winget install GodotEngine.GodotEngine`) ; s'il manque ses modèles d'export, le script propose de les télécharger (environ 1,3 Go, une seule fois). Ferme le jeu avant de recompiler ;
 - `lancer.cmd` (double-clic) ouvre le jeu : l'exe compilé s'il existe, sinon Godot sur les sources.
 
 L'exe compilé se suffit à lui-même : c'est le seul fichier à copier sur les PC des joueurs, rien d'autre à installer pour jouer (ni Godot, ni Node). Il lui faut Windows 64 bits et une carte graphique compatible Vulkan ou Direct3D 12 (presque tous les PC récents). L'exe n'étant pas signé, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : « Informations complémentaires » puis « Exécuter quand même ». Tous les joueurs doivent avoir la même version. Recompile après chaque modification du jeu ou ajout de niveau, ou télécharge l'exe d'une version publiée (voir [Publier une version](#publier-une-version)).
@@ -153,4 +153,3 @@ On peut aussi écrire les fichiers à la main — le format est décrit par `get
 - La physique est maison (capsule contre boîtes). Elle suffit pour ces deux jeux ; un futur jeu qui demanderait de vrais empilements ou des véhicules devra brancher un vrai moteur.
 - Un joueur qui arrive en cours de partie attend la manche suivante.
 - Les clients sont de confiance (chacun annonce sa propre position) : c'est un jeu entre amis, pas un jeu en ligne compétitif.
-- La version web du jeu ne peut pas héberger de serveur (un navigateur n'ouvre pas de port) : elle rejoint seulement par adresse.

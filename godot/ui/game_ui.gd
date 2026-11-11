@@ -1,7 +1,7 @@
 class_name GameUI
 extends CanvasLayer
 ## Interface par-dessus le jeu : accueil (liste des serveurs, création), panneau du lobby (formulaire généré depuis les réglages
-## déclarés par chaque jeu), bandeau de manche, toasts, scores, podium. Portage de client/src/ui.ts.
+## déclarés par chaque jeu), bandeau de manche, toasts, scores, podium.
 
 signal profile_changed(p: Dictionary)
 signal settings_changed(s: Dictionary)

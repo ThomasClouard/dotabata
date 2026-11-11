@@ -1,7 +1,7 @@
 class_name Logo
 extends VBoxContainer
-## Logo « Dotabata! » (lettres qui sautillent) et ドタバタ dessiné en traits, sans police japonaise : identique sur
-## Windows et sur le web. Sert à l'écran de chargement et à l'écran titre (taille réglable par `scale_factor`).
+## Logo « Dotabata! » (lettres qui sautillent) et ドタバタ dessiné en traits, sans police japonaise : identique
+## partout. Sert à l'écran de chargement et à l'écran titre (taille réglable par `scale_factor`).
 
 const UNIT := 110.0  # avance d'un kana dans sa boîte 100 × 100
 

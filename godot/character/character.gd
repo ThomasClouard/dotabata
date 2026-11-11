@@ -2,7 +2,7 @@ class_name Character
 extends Node3D
 ## Personnages façon pâte à modeler : corps « haricot » ou boule, gros yeux collés, membres en tube souple
 ## animés par ressorts, squelette cartoon à l'intérieur et peau qui s'efface autour des impacts (shader).
-## Huit modèles, décrits par la table SPECS. Portage de client/src/character/character.ts ;
+## Huit modèles, décrits par la table SPECS ;
 ## les tubes des membres sont déformés dans le vertex shader au lieu d'être recalculés à chaque image.
 
 const MAX_HITS := 12

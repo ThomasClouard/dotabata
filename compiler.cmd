@@ -1,8 +1,6 @@
 @echo off
 rem Dotabata! - compile le jeu en un seul exe : godot\build\windows\Dotabata.exe
 rem Ensuite, lancer.cmd lance cet exe (et c'est le seul fichier a copier sur les PC des joueurs).
-rem   compiler.cmd          compile la version Windows
-rem   compiler.cmd web      compile aussi la version web (godot\build\web\)
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
@@ -27,7 +25,6 @@ if not defined GODOT (
 
 rem --- modeles d'export de la version de Godot installee : telecharges une fois si besoin ---
 set "TPL_ARGS="
-if /i "%~1"=="web" set "TPL_ARGS=-Web"
 rem compilation automatique (GitHub Actions) : pas de question, on telecharge directement
 if defined CI set "TPL_ARGS=%TPL_ARGS% -Yes"
 powershell -NoProfile -ExecutionPolicy Bypass -File godot\tools\install-templates.ps1 -Godot "%GODOT%" %TPL_ARGS%
@@ -59,13 +56,6 @@ if not exist godot\build\windows mkdir godot\build\windows
 "%GODOT%" --headless --path godot --export-release "Windows Desktop" build/windows/Dotabata.exe
 if errorlevel 1 goto :fail
 if not exist godot\build\windows\Dotabata.exe goto :fail
-
-if /i "%~1"=="web" (
-  echo Compilation de la version web dans godot\build\web\...
-  if not exist godot\build\web mkdir godot\build\web
-  "%GODOT%" --headless --path godot --export-release "Web" build/web/index.html
-  if errorlevel 1 goto :fail
-)
 
 echo.
 echo Termine : godot\build\windows\Dotabata.exe

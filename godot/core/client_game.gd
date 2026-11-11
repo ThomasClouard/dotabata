@@ -1,6 +1,6 @@
 class_name ClientGame
 extends RefCounted
-## Contrat client d'un mini-jeu (équivalent de client/src/api.ts). `ctx` est le nœud Main.
+## Contrat client d'un mini-jeu. `ctx` est le nœud Main.
 
 func on_enter(_ctx: Main, _init: Variant) -> void:
 	pass

@@ -1,7 +1,6 @@
 class_name MortarClient
 extends ClientGame
 ## Abri & mortier — côté client : îles, blocs instanciés, visée, obus, explosions, caisses, zone, HUD.
-## Portage de games/mortar/client.ts.
 
 const SHELL_COLOR := {"normal": 0x2b2140, "mega": 0xd00000, "cluster": 0xff9f1c, "sub": 0xff9f1c}
 const CRATE_INFO := {

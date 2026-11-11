@@ -18,10 +18,7 @@ static var _task := -1  # tâche de dessin en cours (WorkerThreadPool) : à atte
 static func install() -> void:
 	if DisplayServer.get_name() == "headless" or not DisplayServer.has_feature(DisplayServer.FEATURE_CUSTOM_CURSOR_SHAPE):
 		return
-	if OS.has_feature("web"):
-		_apply(_build())  # pas de fils de travail garantis sur le web
-	else:
-		_task = WorkerThreadPool.add_task(func() -> void: _apply.call_deferred(_build()))
+	_task = WorkerThreadPool.add_task(func() -> void: _apply.call_deferred(_build()))
 
 
 ## [image, forme, point actif] pour chaque curseur.

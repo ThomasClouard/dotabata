@@ -11,7 +11,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # « 4.7.2.stable.official.ed1daf0bf » → dossier « 4.7.2.stable », version publiée « 4.7.2-stable »
-$v = ((& $Godot --version) | Select-Object -First 1).Trim()
+$v = "$((& $Godot --version) | Select-Object -First 1)".Trim()
+if (-not $v) {
+    Write-Host "Godot n'a pas renvoyé sa version : $Godot"
+    Write-Host "Il faut la version console de Godot (godot_console.exe ou Godot_v4*_win64_console.exe)."
+    exit 1
+}
 $parts = $v.Split('.')
 $i = 0
 while ($i -lt $parts.Length -and $parts[$i] -match '^\d+$') { $i++ }

@@ -8,10 +8,15 @@ setlocal
 cd /d "%~dp0"
 
 rem --- Godot 4.7 : dans le PATH, sinon l'installation winget ---
+rem La version console d'abord : godot.exe (fenetree) n'ecrit rien dans la console,
+rem ni sa version ni les messages d'erreur de l'export.
 set "GODOT="
-for /f "delims=" %%G in ('where godot 2^>nul') do if not defined GODOT set "GODOT=%%G"
+for /f "delims=" %%G in ('where godot_console 2^>nul') do if not defined GODOT set "GODOT=%%G"
 if not defined GODOT (
   for /f "delims=" %%G in ('dir /b /s "%LOCALAPPDATA%\Microsoft\WinGet\Packages\Godot_v4*_win64_console.exe" 2^>nul') do if not defined GODOT set "GODOT=%%G"
+)
+if not defined GODOT (
+  for /f "delims=" %%G in ('where godot 2^>nul') do if not defined GODOT set "GODOT=%%G"
 )
 if not defined GODOT (
   echo Godot 4.7 est introuvable. Installe-le avec :

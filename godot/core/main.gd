@@ -670,7 +670,7 @@ func _process(delta: float) -> void:
 	_send_acc += dt
 	if _send_acc >= 1.0 / 30.0 and my_id != "":
 		_send_acc = 0.0
-		net.send_raw('{"t":"state","s":[%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f]}' % [body.px, body.py, body.pz, _my_yaw, mine.flags if mine else 0, body.vx, body.vy, body.vz])
+		net.send_raw('{"t":"state","s":[%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f]}' % [body.px, body.py, body.pz, _game.net_yaw(_my_yaw) if _game else _my_yaw, mine.flags if mine else 0, body.vx, body.vy, body.vz])
 
 	for p: ClientPlayer in players.values():
 		var is_me := p == mine
@@ -683,8 +683,10 @@ func _process(delta: float) -> void:
 			p.yaw = p.pin["yaw"]
 			dance = p.pin["dance"]
 		elif is_me:
-			speed = sqrt((body.vx - body.gvx) ** 2 + (body.vz - body.gvz) ** 2)
-			vy = body.vy
+			var mv := Vector3(body.vx - body.gvx, body.vy, body.vz - body.gvz)
+			var anim := _game.motion(body.pos(), mv) if _game else Vector2(Vector2(mv.x, mv.z).length(), mv.y)
+			speed = anim.x
+			vy = anim.y
 			flags = p.flags
 		else:
 			# autres joueurs : on glisse vers la dernière position reçue, légèrement extrapolée
@@ -694,8 +696,9 @@ func _process(delta: float) -> void:
 			else:
 				p.pos = p.pos.lerp(target, 1.0 - exp(-16.0 * dt))
 			p.yaw = _lerp_angle(p.yaw, p.net_yaw, 1.0 - exp(-12.0 * dt))
-			speed = sqrt(p.net_v.x * p.net_v.x + p.net_v.z * p.net_v.z)
-			vy = p.net_v.y
+			var anim := _game.motion(p.pos, p.net_v) if _game else Vector2(Vector2(p.net_v.x, p.net_v.z).length(), p.net_v.y)
+			speed = anim.x
+			vy = anim.y
 			flags = p.net_flags
 			p.flags = flags
 		var chr := p.chr

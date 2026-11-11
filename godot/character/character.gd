@@ -520,6 +520,13 @@ func _revive() -> void:
 		l.anchor = l.anchor0
 
 
+## Accroche d'équipements de jeu (casque, fusées…) : le nœud qui suit le corps (écrasement, balancement), la hauteur
+## des yeux, le rayon du corps à cette hauteur et à mi-corps. Un changement de modèle efface ce qui y est accroché.
+func gear() -> Dictionary:
+	var mid_y: float = lerpf(_sp["y0"], _sp["y1"], 0.55)
+	return {"node": _content, "eye_y": _eye_y, "head_r": _radius_at(_eye_y), "mid_y": mid_y, "mid_r": _radius_at(mid_y)}
+
+
 # ---------- animation ----------
 
 func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, charging := false, dance := false) -> void:

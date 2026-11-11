@@ -41,6 +41,17 @@ func pose_flags(_b: Phys.Body) -> int:
 	return 0
 
 
+## Vitesse de marche et vitesse verticale servant à animer un personnage (position p, vitesse v). Par défaut, le haut
+## est l'axe Y ; un jeu à gravité différente (planètes) les calcule dans son propre repère.
+func motion(_p: Vector3, v: Vector3) -> Vector2:
+	return Vector2(sqrt(v.x * v.x + v.z * v.z), v.y)
+
+
+## Cap transmis aux autres joueurs (par défaut : celui du personnage, autour de l'axe Y).
+func net_yaw(yaw: float) -> float:
+	return yaw
+
+
 ## Joueur « fantôme » (ex. : arrivé au parcours) : ni bousculé, ni bousculant.
 func is_ghost(_id: String) -> bool:
 	return false

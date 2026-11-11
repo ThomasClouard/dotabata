@@ -43,6 +43,8 @@ func _init() -> void:
 		_test_bug_barre()
 	if _wants("mortier"):
 		_test_mortar()
+	if _wants("espace"):
+		_test_space()
 	print("%d vérifications, %d échec(s) en %.1f s" % [_checks, _fails, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if _fails > 0 else 0)
 
@@ -223,6 +225,126 @@ func _test_mortar() -> void:
 	_eq(ids.size(), 5, "mortier : joueurs distincts")
 	_ok(results.any(func(r: Dictionary) -> bool: return r["rank"] == 0), "mortier : un vainqueur")
 	print("mortier : %d obus, %d explosions, fin à %.1f s" % [h.of("shell").size(), h.of("boom").size(), h.t])
+
+
+func _space(n: int, bots: bool, extra := {}) -> Harness:
+	var s := Scoring.default_game_settings(GameMetas.SPACE)
+	s.merge(extra, true)
+	var h := Harness.new(s, n, bots)
+	var g := SpaceServer.new(h.ctx)
+	h.game = g
+	var res := g.start_with(1234)
+	h.init = res["init"]
+	for id: String in res["spawns"]:
+		var sp: Array = res["spawns"][id]
+		h.player(id).p = [sp[0], sp[1], sp[2]]
+	return h
+
+
+static func _surface(pl: Dictionary) -> Array:
+	var c := SpaceShared.v3(pl["c"])
+	var p := c + Vector3.UP * float(pl["r"])
+	return [p.x, p.y, p.z]
+
+
+func _test_space() -> void:
+	# planètes : déterministes, séparées, plus loin = plus de points
+	var a := SpaceShared.layout(7, 10)
+	_eq(JSON.stringify(a), JSON.stringify(SpaceShared.layout(7, 10)), "espace : placement déterministe")
+	_eq(a.size(), 11, "espace : départ + 10 planètes")
+	var gap := INF
+	for i in a.size():
+		for j in range(i + 1, a.size()):
+			gap = minf(gap, SpaceShared.v3(a[i]["c"]).distance_to(SpaceShared.v3(a[j]["c"])) - a[i]["r"] - a[j]["r"])
+	_ok(gap > 8.0, "espace : planètes bien séparées (écart min %.1f m)" % gap)
+	var mono := true
+	for i in range(2, a.size()):
+		if a[i]["pts"] < a[i - 1]["pts"] or SpaceShared.v3(a[i]["c"]).length() < SpaceShared.v3(a[i - 1]["c"]).length() - 13.0:
+			mono = false
+	_ok(mono, "espace : points croissants avec la distance")
+	_eq([a[1]["pts"], a[10]["pts"]], [1, 5], "espace : de 1 à 5 points")
+	# 16 planètes en couloirs : séparées, et chaque lointaine a une proche dans une direction voisine
+	var b := SpaceShared.layout(3, 16)
+	var gap16 := INF
+	var lanes_ok := true
+	for i in range(1, b.size()):
+		var ci := SpaceShared.v3(b[i]["c"])
+		for j in range(i + 1, b.size()):
+			gap16 = minf(gap16, ci.distance_to(SpaceShared.v3(b[j]["c"])) - b[i]["r"] - b[j]["r"])
+		if i > 8:
+			var near_ok := false
+			for j in range(1, 9):
+				if ci.angle_to(SpaceShared.v3(b[j]["c"])) < deg_to_rad(15.0):
+					near_ok = true
+			lanes_ok = lanes_ok and near_ok
+	_ok(gap16 > 8.0, "espace : 16 planètes bien séparées (écart min %.1f m)" % gap16)
+	_ok(lanes_ok, "espace : derrière chaque planète proche, une lointaine dans la même direction")
+	# sans attraction : ligne droite ; avec : un tir rasant retombe
+	var pr := SpaceShared.predict(Vector3(0, 13, 0), Vector3(0, 0, 30), a.slice(0, 1), false, 2.0)
+	var last: Vector3 = pr["pts"][pr["pts"].size() - 1]
+	_ok(absf(last.y - 13.0) < 1e-3 and absf(last.z - SpaceShared.SPEED * 2.0) < 0.6, "espace : vol droit à vitesse fixe sans attraction (%s)" % last)
+	pr = SpaceShared.predict(Vector3(0, 13, 0), Vector3(0, 0, 30), a.slice(0, 1), true, 2.0)
+	last = pr["pts"][pr["pts"].size() - 1]
+	_ok(last.y < 12.0, "espace : avec attraction, la trajectoire se courbe vers la planète (%s)" % last)
+	var s := SpaceShared.step(Vector3(0, 13, 0), Vector3(0, 0, 15), 0.5, a.slice(0, 1), false, Vector3.UP)
+	_ok(absf(s[1].length() - SpaceShared.SPEED) < 1e-3, "espace : vitesse constante, même avec les rétro-fusées")
+	_ok(s[1].angle_to(Vector3(0, 0, 1)) < deg_to_rad(4.0) and s[1].y > 0.0, "espace : les rétro-fusées font tourner la trajectoire")
+
+	# vrais joueurs : atterrissage vérifié, classement points puis heure, fin quand tout le monde est posé
+	var h := _space(3, false, {"aimTime": 10, "flightTime": 20})
+	var g: SpaceServer = h.game
+	g.on_player_message("p0", {"t": "launch"})
+	_eq(h.of("launch").size(), 0, "espace : pas de décollage pendant le compte à rebours")
+	h.tick(3.0)
+	g.on_player_message("p0", {"t": "launch"})
+	g.on_player_message("p0", {"t": "launch"})
+	_eq(h.of("launch").size(), 1, "espace : décollage à la demande, une seule fois")
+	h.tick(11.5)
+	_eq(h.of("launch").size(), 3, "espace : décollage automatique des retardataires à la fin du temps")
+	var last_i := g.planets.size() - 1
+	h.put("p0", [0, 100, 0])
+	g.on_player_message("p0", {"t": "landed", "planet": last_i})
+	_eq(h.of("landed").size(), 0, "espace : atterrissage loin de la planète refusé")
+	h.put("p0", _surface(g.planets[last_i]))
+	g.on_player_message("p0", {"t": "landed", "planet": last_i})
+	h.tick(12.0)
+	h.put("p1", _surface(g.planets[1]))
+	g.on_player_message("p1", {"t": "landed", "planet": 1})
+	h.tick(13.0)
+	h.put("p2", _surface(g.planets[1]))
+	g.on_player_message("p2", {"t": "landed", "planet": 1})
+	_eq(h.of("landed").size(), 3, "espace : trois atterrissages")
+	_ok(not h.ended, "espace : petite pause avant la fin")
+	h.tick(16.0)
+	_ok(h.ended, "espace : fin quand tout le monde est posé")
+	var res := g.get_results()
+	_eq(res.map(func(r: Dictionary) -> String: return r["id"]), ["p0", "p1", "p2"], "espace : classement points puis heure")
+	_ok(res[1]["label"].ends_with("11,0 s"), "espace : l'heure d'atterrissage est affichée (%s)" % res[1]["label"])
+	_eq(res.map(func(r: Dictionary) -> int: return r["rank"]), [0, 1, 2], "espace : rangs")
+
+	# personne ne se pose : perdu à la fin du vol
+	h = _space(2, false, {"aimTime": 10, "flightTime": 15})
+	g = h.game
+	h.put("p0", [0, 60, 0])
+	h.put("p1", [0, 500, 0])
+	h.tick(11.6)
+	_eq(h.of("lost").size(), 1, "espace : perdu hors de la zone")
+	h.tick(25.0)
+	_ok(not h.ended, "espace : le vol continue")
+	h.tick(26.2)
+	_ok(h.ended and h.of("lost").size() == 2, "espace : perdu à la fin du vol")
+	_eq(g.get_results().map(func(r: Dictionary) -> int: return r["rank"]), [0, 0], "espace : perdus ex æquo")
+
+	# parties de bots, avec et sans attraction
+	for grav: bool in [true, false]:
+		var t0 := Time.get_ticks_msec()
+		h = _space(6, true, {"aimTime": 10, "gravity": grav})
+		h.simulate(80.0)
+		var landed := h.of("landed").filter(func(m: Dictionary) -> bool: return m["planet"] > 0)
+		_ok(h.ended, "espace (attraction %s) : la manche se termine" % grav)
+		_ok(landed.size() >= 3, "espace (attraction %s) : au moins 3 bots posés sur une planète d'arrivée (%d)" % [grav, landed.size()])
+		_eq(h.game.get_results().size(), 6, "espace : lignes du classement")
+		print("espace (attraction %s) : %d/6 posés, %d retombés, %d perdus, fin à %.1f s (%.1f s) — %s" % [grav, landed.size(), h.of("landed").size() - landed.size(), h.of("lost").size(), h.t, (Time.get_ticks_msec() - t0) / 1000.0, JSON.stringify(h.game.get_results().map(func(r: Dictionary) -> String: return r["label"]))])
 
 
 # ---------- règles de session ----------

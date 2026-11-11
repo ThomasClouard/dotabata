@@ -1,10 +1,11 @@
 {
   "rounds": 5,
   "order": "alternate",
-  "games": ["parkour", "mortar"],
+  "games": ["parkour", "mortar", "space"],
   "list": [],
   "game": {
     "parkour": { "duration": 150, "hurry": 40, "levels": [] },
-    "mortar": { "buildTime": 20, "battleTime": 120, "budget": 14, "hp": 100, "crates": true, "shrink": 35 }
+    "mortar": { "buildTime": 20, "battleTime": 120, "budget": 14, "hp": 100, "crates": true, "shrink": 35 },
+    "space": { "aimTime": 30, "flightTime": 30, "fuel": 1.5, "planets": 12, "gravity": true, "bump": true }
   }
 }

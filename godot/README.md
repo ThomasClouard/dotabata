@@ -1,7 +1,7 @@
 # Dotabata! — le jeu (Godot 4)
 
 Tout le jeu est ici, **serveur compris** : menu principal avec la liste des parties du réseau local, création
-d'une partie, lobby, Parcours délirant, Abri & mortier, écran des scores, podium. Chaque exe peut héberger une partie
+d'une partie, lobby, Parcours délirant, Abri & mortier, Saut cosmique, écran des scores, podium. Chaque exe peut héberger une partie
 (`server/`) ou rejoindre celle d'un autre. Tout est procédural (aucune image, aucun son, aucun modèle à charger).
 
 ## Lancer
@@ -103,13 +103,14 @@ Attention : `--games`, `--rounds` et `--set` envoient des réglages au serveur, 
 ## Tests
 
 Le serveur : parties complètes jouées par des bots sur les 7 niveaux et les niveaux d'essai, règles du parcours
-avec de faux joueurs (boutons, leviers, dalles mémoire, objets, pièces), bataille de mortier.
+avec de faux joueurs (boutons, leviers, dalles mémoire, objets, pièces), bataille de mortier, saut cosmique
+(planètes, atterrissages vérifiés, classement, parties de bots avec et sans attraction).
 
 ```bash
 godot --headless --path godot -s res://tests/run_server_tests.gd
 ```
 
-`-- --only=balade,mortier` ne lance que certains cas. Bout en bout : un vrai serveur sur un port, des clients
+`-- --only=balade,mortier,espace` ne lance que certains cas. Bout en bout : un vrai serveur sur un port, des clients
 WebSocket (hôte, mot de passe refusé puis accepté, serveur plein), la découverte UDP, les réglages du serveur
 modifiés avec un autre joueur connecté puis en pleine manche, la fermeture annoncée.
 

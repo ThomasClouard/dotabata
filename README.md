@@ -6,7 +6,7 @@ Party game pour 2 à 10 joueurs sur le même réseau local. **Un seul programme*
 
 *Dotabata* (ドタバタ) : en japonais, le chahut maladroit, tout le monde qui court et trébuche dans tous les sens.
 
-Deux mini-jeux pour l'instant :
+Trois mini-jeux pour l'instant :
 
 - **Parcours délirant** — course d'obstacles avec checkpoints, 7 niveaux : *balade*, *usine*, *vertige*, *fete-foraine*, *volcan*, *labo*, *chateau*. Éléments :
   - sols : plateformes, glace, tapis roulants, dalles friables, plateformes mobiles, rouleaux, plateaux tournants, grande roue, pistons, dalles clignotantes, boue, gélatine, rampes et toboggans, speed pads, bulles ;
@@ -23,6 +23,11 @@ Deux mini-jeux pour l'instant :
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
 
   <img src="docs/captures/mortier-construction.jpg" width="49%" alt="Construction de l'abri en blocs de bois sur son île"> <img src="docs/captures/mortier-bataille.jpg" width="49%" alt="Bataille : la jauge de tir se charge, les obus volent entre les îles">
+- **Saut cosmique** — tout le monde, casque d'astronaute sur la tête, démarre sur une petite planète ronde dont on peut faire le tour. Autour, des planètes d'arrivée plus ou moins lointaines : de 1 point pour la plus proche à 5 points pour la plus lointaine (et la plus petite). Pendant le temps imparti (30 s), chacun se place, vise et décolle quand il veut (A ou Espace) ; les retardataires décollent automatiquement à la fin. De courts pointillés montrent la première seconde de la trajectoire ; clic droit (ou LT) maintenu : visée précise à la longue-vue, avec un réticule dans l'axe exact du tir. Les planètes sont rangées par couloirs : derrière une planète proche, une plus lointaine, un peu décalée, permet de se rattraper si on rate la première. On vole lentement, toujours à la même vitesse : les rétro-fusées font seulement tourner la trajectoire vers la direction regardée, et le carburant ne permet de corriger que de quelques degrés (environ 9° avec le réglage par défaut). Toucher une planète, c'est s'y poser ; retomber sur la planète de départ ou se perdre dans l'espace ne rapporte rien. Classement : les points de la planète, puis, à points égaux, le premier posé.
+
+  Réglages : temps pour décoller, durée maximale du vol, carburant, nombre de planètes, **Attraction des planètes** (trajectoires courbes et effets de fronde ; désactivée, on vole en ligne droite) et **Collisions entre joueurs** (on rebondit les uns sur les autres en vol).
+
+  ![Visée sur la planète de départ : l'astronaute, son casque et ses fusées, et les courts pointillés du début de la trajectoire](docs/captures/espace.jpg)
 
 Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le lancer depuis les sources, ses options et l'export.
 
@@ -77,6 +82,8 @@ Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godo
 | Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches | Stick droit |
 | Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
 | Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |
+| Saut cosmique — viser et décoller | Souris (cap et hauteur) · clic droit maintenu : visée précise · Espace : décoller | Stick droit · LT maintenu : visée précise · A : décoller |
+| Saut cosmique — rétro-fusées | Maintenir Espace (la trajectoire tourne vers la direction regardée) | Maintenir A |
 | Menus | Flèches, Entrée, Échap | Croix ou stick gauche, A : valider, B : retour |
 | Lobby — régler la partie | Souris (Échap ferme la fenêtre des réglages) | Start, puis croix pour choisir, A pour valider, LB / RB pour changer d'onglet, B ou Start pour fermer la fenêtre puis revenir au terrain |
 

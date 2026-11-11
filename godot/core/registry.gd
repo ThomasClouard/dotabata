@@ -9,4 +9,6 @@ static func create(game_id: String) -> ClientGame:
 			return ParkourClient.new()
 		"mortar":
 			return MortarClient.new()
+		"space":
+			return SpaceClient.new()
 	return null

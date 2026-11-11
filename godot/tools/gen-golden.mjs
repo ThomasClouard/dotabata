@@ -550,9 +550,9 @@ function inputs(steps) {
   const rawSettings = [
     {},
     null,
-    { rounds: 3, order: 'list', list: ['mortar', 'nope', 'parkour'], games: ['mortar'], game: { parkour: { duration: 9999, jostle: 0, levels: ['a', 3, 'b'] }, mortar: { hp: '50', crates: '' } } },
+    { rounds: 3, order: 'list', list: ['mortar', 'nope', 'parkour'], games: ['mortar'], game: { parkour: { mode: 'best', duration: 9999, jostle: 0, levels: ['a', 3, 'b'] }, mortar: { hp: '50', crates: '' } } },
     { rounds: '7', order: 'random', games: ['parkour', 'parkour', 'x'], game: { mortar: { buildTime: -4, shrink: 'abc' } } },
-    { rounds: 40, order: 'weird', list: ['parkour'] },
+    { rounds: 40, order: 'weird', list: ['parkour'], game: { parkour: { mode: 'nope' } } },
   ];
   const settings = rawSettings.map((raw) => ({ raw, out: sanitizeSettings(raw, gameMetas) }));
   let k = 0;

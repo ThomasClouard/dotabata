@@ -39,3 +39,8 @@ func jostle(b: Phys.Body, op: Vector3, _ov: Vector3) -> void:
 ## Bits de pose propres au jeu, ajoutés aux drapeaux de l'état envoyé (Protocol.FLAG_ZIP…).
 func pose_flags(_b: Phys.Body) -> int:
 	return 0
+
+
+## Joueur « fantôme » (ex. : arrivé au parcours) : ni bousculé, ni bousculant.
+func is_ghost(_id: String) -> bool:
+	return false

@@ -624,7 +624,15 @@ func _build_lobby() -> void:
 	box.add_child(UI.label("%d manche%s · %s" % [rounds, "s" if rounds > 1 else "", order_txt], 16))
 	var names := {}
 	for g: Dictionary in m["metas"]:
-		names[g["id"]] = g["name"]
+		# nom du jeu, suivi de ses réglages à choix (ex. : « Parcours délirant · Meilleur temps »)
+		var label: String = g["name"]
+		var vals: Dictionary = s["game"].get(g["id"], {})
+		for key: String in g["settings"]:
+			var def: Dictionary = g["settings"][key]
+			if def["type"] == "choice":
+				var k: int = maxi(0, def["options"].find(vals.get(key, def["default"])))
+				label += " · " + str(def.get("labels", def["options"])[k])
+		names[g["id"]] = label
 	var pills := UI.flow()
 	if s["order"] == "list":
 		var list: Array = s["list"]
@@ -873,6 +881,22 @@ func _tab_game(body: VBoxContainer, s: Dictionary, g: Dictionary, host: bool, pu
 			body.add_child(_setting_row(text, _stepper(vals.get(key, def["default"]), def["min"], def["max"], def.get("step", 1), def.get("unit", ""), host, func(v: float) -> void:
 				vals[key] = v
 				push.call())))
+		elif def["type"] == "choice":
+			var seg := HBoxContainer.new()
+			seg.add_theme_constant_override("separation", 6)
+			var cur: String = vals.get(key, def["default"])
+			var labels: Array = def.get("labels", def["options"])
+			for k in def["options"].size():
+				var opt: String = def["options"][k]
+				var b := UI.button(labels[k], "small", func() -> void:
+					if host:
+						vals[key] = opt
+						push.call())
+				b.disabled = not host and opt != cur
+				if opt == cur:
+					UI.mark_selected(b)
+				seg.add_child(b)
+			body.add_child(_setting_row(text, seg))
 		elif def["type"] == "bool":
 			body.add_child(_setting_row(text, _toggle(bool(vals.get(key, def["default"])), host, func(on: bool) -> void:
 				vals[key] = on

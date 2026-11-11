@@ -73,7 +73,8 @@ func on_lobby(m: Dictionary) -> void:
 			var game := key.get_slice(".", 0)
 			if not s["game"].has(game):
 				s["game"][game] = {}
-			s["game"][game][key.get_slice(".", 1)] = float(kv.get_slice("=", 1))
+			var val := kv.get_slice("=", 1)
+			s["game"][game][key.get_slice(".", 1)] = float(val) if val.is_valid_float() else val  # parkour.mode=best
 		main.net.send({"t": "settings", "settings": s})
 		return
 	var want := Config.arg_int("bots")

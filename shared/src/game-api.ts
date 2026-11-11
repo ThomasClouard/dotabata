@@ -6,7 +6,8 @@ import type { Hit } from './protocol';
 export type SettingDef =
   | { type: 'number'; label: string; default: number; min: number; max: number; step?: number; unit?: string }
   | { type: 'bool'; label: string; default: boolean }
-  | { type: 'multi'; label: string; default: string[]; options: string[] }; // liste vide = tout autorisé
+  | { type: 'multi'; label: string; default: string[]; options: string[] } // liste vide = tout autorisé
+  | { type: 'choice'; label: string; default: string; options: string[]; labels: string[] }; // une valeur parmi options (labels : textes affichés)
 
 export type SettingsSchema = Record<string, SettingDef>;
 

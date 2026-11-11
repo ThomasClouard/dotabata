@@ -37,6 +37,12 @@ var props: ParkourProps  # éléments de la vague 1, arches, confettis, brouilla
 var props2: ParkourProps2  # éléments de la vague 2 (sols spéciaux, propulseurs), joueurs suspendus
 var props3: ParkourProps3  # éléments de la vague 3 (interactions, objets, pièces), HUD de l'objet
 var finish_tops: Array = []  # [haut de l'arche d'arrivée (monde), largeur]
+var best_mode := false  # mode « meilleur temps » : on refait le parcours autant qu'on veut
+var run_start := 0.0  # début de l'essai en cours (horloge serveur)
+var bests := {}  # id → meilleur temps (mode meilleur temps)
+var ghosts := {}  # joueurs arrivés : ils ne bousculent plus et ne sont plus bousculés
+var hint: Label
+var _restart_sent := 0.0
 
 
 func _put(e: Dictionary, o: Node3D) -> Node3D:
@@ -221,7 +227,10 @@ static func _arrow_mesh() -> ArrayMesh:
 
 
 func _set_respawn() -> void:
-	var e: Dictionary = els[Level.find_type(level, "start") if cp < 0 else int(cps[cp])]
+	var idx: int = Level.find_type(level, "start") if cp < 0 else int(cps[cp])
+	if finished and not best_mode:
+		idx = Level.find_type(level, "finish")  # arrivé : on reste sur l'arrivée, même après une chute
+	var e: Dictionary = els[idx]
 	respawn = Vector3(e["pos"][0] + (randf() - 0.5) * 1.2, Level.top_of(e) + 0.2, e["pos"][2] + (randf() - 0.5) * 1.2)
 
 
@@ -244,6 +253,8 @@ func on_enter(c: Main, init: Variant) -> void:
 	props2 = ParkourProps2.new(ctx, level)
 	props3 = ParkourProps3.new(ctx, level, lstate)
 	init_msg = init
+	best_mode = init.get("mode", "first") == "best"
+	run_start = ctx.start_at
 	for i in els.size():
 		objs.append(_build(els[i], i))
 	marker = Gfx.mesh(Shapes.cylinder(0.55, 0.0, 1.1, 20), Gfx.mat(0xffd60a, {"glow": 1.2}), 0, 0, 0, ctx.world, false)
@@ -265,7 +276,14 @@ func on_enter(c: Main, init: Variant) -> void:
 	if t != null:
 		ctx.cam_yaw = atan2(t["pos"][0] - ctx.body.px, t["pos"][2] - ctx.body.pz)
 	top = UI.label("", 20)
-	ctx.ui.hud_card("top").add_child(top)
+	top.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var top_box := VBoxContainer.new()
+	top_box.add_theme_constant_override("separation", 0)
+	top_box.add_child(top)
+	hint = UI.label("", 12, UI.MUTED)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top_box.add_child(hint)
+	ctx.ui.hud_card("top").add_child(top_box)
 	side = UI.label("", 14)
 	ctx.ui.hud_card("side").add_child(side)
 	props3.build_hud()
@@ -285,6 +303,25 @@ func on_exit() -> void:
 func colliders(t: float) -> Array:
 	_frame_cols = Level.build_colliders(level, t, lstate)
 	return _frame_cols
+
+
+func is_ghost(id: String) -> bool:
+	return ghosts.has(id)
+
+
+## Demande au serveur de recommencer (« start » : au départ, « cp » : au dernier checkpoint) ; il répond par « restart ».
+func _ask_restart(to: String) -> void:
+	var now := ctx.now()
+	if now < ctx.start_at or now - _restart_sent < 0.4 or (finished and not best_mode):
+		return
+	_restart_sent = now
+	ctx.send_game({"t": "restart", "to": to})
+
+
+func _reset_gates() -> void:
+	for mat: StandardMaterial3D in gates.values():
+		mat.albedo_color = Gfx.col(0xdde3ea)
+		mat.emission_enabled = false
 
 
 ## Bousculade entre joueurs selon le réglage de la manche (désactivée : on se traverse).
@@ -389,8 +426,23 @@ func on_message(m: Dictionary) -> void:
 					gate.emission_enabled = true
 					gate.emission = gate.albedo_color
 					gate.emission_energy_multiplier = 1.4
+		"restart":
+			ghosts.erase(m["id"])
+			if m["id"] == ctx.my_id:
+				finished = false
+				cp = int(m["cp"])
+				run_start = float(m["runStart"])
+				if cp < 0:
+					_reset_gates()
+				_set_respawn()
+				ctx.teleport(respawn.x, respawn.y, respawn.z)
+				ctx.sfx.checkpoint()
 		"finish":
-			finishers.append({"id": m["id"], "time": m["time"]})
+			ghosts[m["id"]] = true
+			if best_mode:
+				bests[m["id"]] = float(m["best"])
+			else:
+				finishers.append({"id": m["id"], "time": m["time"]})
 			# confettis au-dessus de l'arche d'arrivée la plus proche de l'arrivant
 			var who: ClientPlayer = ctx.players.get(m["id"])
 			var best: Variant = null
@@ -401,9 +453,14 @@ func on_message(m: Dictionary) -> void:
 				props.confetti(best[0], best[1], 3.0 if m["id"] == ctx.my_id else 1.6)
 			if m["id"] == ctx.my_id:
 				finished = true
+				_set_respawn()
 				ctx.sfx.win()
-				var place := int(m["place"])
-				ctx.toast("Premier !" if place == 1 else "Arrivé %de !" % place, 3.0)
+				if best_mode:
+					var txt := ParkourShared.format_time(m["time"])
+					ctx.toast("Record : %s !" % txt if m["record"] else "%s  (record %s)" % [txt, ParkourShared.format_time(m["best"])], 3.0)
+				else:
+					var place := int(m["place"])
+					ctx.toast("Premier !" if place == 1 else "Arrivé %de !" % place, 3.0)
 				ctx.particles.burst(Vector3(ctx.body.px, ctx.body.py + 1.0, ctx.body.pz), 60, [0xff4d6d, 0xffd60a, 0x70e000, 0x00b4d8], 9.0, 0.18, 1.6, 8.0)
 		"hurry":
 			end_at = m["endAt"]
@@ -413,6 +470,10 @@ func on_message(m: Dictionary) -> void:
 
 func on_frame(dt: float) -> void:
 	var t := ctx.now()
+	if ctx.input.hit("KeyR", "PadCp"):
+		_ask_restart("cp")
+	elif ctx.input.hit("KeyT", "PadStart"):
+		_ask_restart("start")
 	var by_id := {}
 	for c: Phys.Col in _frame_cols:
 		by_id[c.id] = c
@@ -483,11 +544,29 @@ func on_frame(dt: float) -> void:
 			state = "Arrivé !"
 		elif not cps.is_empty():
 			state = "Checkpoint %d/%d" % [cp + 1, cps.size()]
-		top.text = "%s  ·  %s" % [ParkourShared.format_time(left), state]
-		var lines := PackedStringArray(["ARRIVÉES"])
-		for i in finishers.size():
-			var p: ClientPlayer = ctx.players.get(finishers[i]["id"])
-			lines.append("%d. %s — %s" % [i + 1, p.name if p else "?", ParkourShared.format_time(finishers[i]["time"])])
-		if finishers.is_empty():
-			lines.append("personne pour l'instant")
+		var keys := ["R", "T"]
+		if Pad.device() >= 0:
+			keys = [Pad.label(Pad.bindings.get("checkpoint", JOY_BUTTON_LEFT_SHOULDER)), Pad.label(Pad.bindings.get("depart", JOY_BUTTON_BACK))]
+		var lines := PackedStringArray()
+		if best_mode:
+			var run := 0.0 if finished else maxf(0.0, t - maxf(run_start, ctx.start_at))
+			top.text = "%s  ·  Essai %s  ·  %s" % [ParkourShared.format_time(left), ParkourShared.format_time(run), state]
+			hint.text = "%s : dernier checkpoint  ·  %s : recommencer au départ (nouvel essai)" % keys
+			lines.append("MEILLEURS TEMPS")
+			var ids := bests.keys()
+			ids.sort_custom(func(a: String, b: String) -> bool: return bests[a] < bests[b])
+			for i in ids.size():
+				var p: ClientPlayer = ctx.players.get(ids[i])
+				lines.append("%d. %s — %s" % [i + 1, p.name if p else "?", ParkourShared.format_time(bests[ids[i]])])
+			if ids.is_empty():
+				lines.append("personne pour l'instant")
+		else:
+			top.text = "%s  ·  %s" % [ParkourShared.format_time(left), state]
+			hint.text = "" if finished else "%s : dernier checkpoint  ·  %s : recommencer au départ" % keys
+			lines.append("ARRIVÉES")
+			for i in finishers.size():
+				var p: ClientPlayer = ctx.players.get(finishers[i]["id"])
+				lines.append("%d. %s — %s" % [i + 1, p.name if p else "?", ParkourShared.format_time(finishers[i]["time"])])
+			if finishers.is_empty():
+				lines.append("personne pour l'instant")
 		side.text = "\n".join(lines)

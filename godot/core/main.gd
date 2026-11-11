@@ -651,7 +651,7 @@ func _process(delta: float) -> void:
 				_game.pre_step(body, H)
 				var contacts := Phys.step_body(body, mx, mz, jump, _cols, H)
 				for p: ClientPlayer in players.values():
-					if p != mine and p.pin == null and not p.hidden and not p.chr.dead:
+					if p != mine and p.pin == null and not p.hidden and not p.chr.dead and not _game.is_ghost(p.info["id"]) and not _game.is_ghost(my_id):
 						_game.jostle(body, p.pos, p.net_v)  # parcours : bousculade selon le réglage de la manche
 				_game.post_step(body, contacts, H)
 				if body.jumped:

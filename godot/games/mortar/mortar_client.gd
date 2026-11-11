@@ -408,7 +408,7 @@ func on_frame(dt: float) -> void:
 			ghost_mat.albedo_color = Color(Gfx.col(MortarShared.MATS[mat]["color"] if ok else 0xff0000), 0.45)
 		if cell != null and inp.hit("Mouse0", "KeyF"):
 			ctx.send_game({"t": "place", "x": cell.x, "z": cell.z, "mat": mat})
-		if cell != null and inp.hit("Mouse2", "KeyR"):
+		if cell != null and (inp.hit("Mouse2", "KeyR") or inp.hit("PadRemove")):
 			ctx.send_game({"t": "remove", "x": cell.x, "z": cell.z})
 
 	# ----- tir : maintenir pour charger, relâcher pour tirer -----

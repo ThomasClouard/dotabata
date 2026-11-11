@@ -16,6 +16,12 @@ func _init() -> void:
 	var t0 := Time.get_ticks_msec()
 	_test_session_rules()
 	_test_vague3_rules()
+	if _wants("modes"):
+		_test_modes()
+	if _wants("balade-meilleur-temps"):
+		# les bots repartent du départ après chaque arrivée : plusieurs arrivées par bot
+		var log := _test_bots("balade (meilleur temps)", LevelStore.read_level("balade"), 4, 200.0, 6, {"mode": "best"})
+		_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "finish" and m["runs"] >= 2), "meilleur temps : un bot arrivé au moins deux fois")
 	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau"]:
 		if _wants(lv):
 			var need := 1 if lv in ["balade", "usine", "vertige"] else 3
@@ -233,6 +239,79 @@ func _test_session_rules() -> void:
 	print("règles de session : OK")
 
 
+# ---------- parcours : modes, recommencer, arrivée ----------
+
+func _on(h: Harness, id: String, ty: String, k := 0) -> void:
+	var els: Array = h.init["level"]["elements"]
+	var found := 0
+	for e: Dictionary in els:
+		if e["type"] == ty:
+			if found == k:
+				h.put(id, [e["pos"][0], Level.top_of(e), e["pos"][2]])
+				return
+			found += 1
+
+
+func _msgs(h: Harness, ty: String, id: String) -> Array:
+	return h.of(ty).filter(func(m: Dictionary) -> bool: return m["id"] == id)
+
+
+func _test_modes() -> void:
+	var lv := LevelStore.read_level("balade")
+	# premier arrivé : une fois arrivé, on ne recommence plus et on réapparaît sur l'arrivée
+	var h := _parkour(lv, parkour_settings({"duration": 200, "hurry": 200}), 2, false)
+	_eq(h.init["mode"], "first", "mode par défaut")
+	h.tick(2.0)
+	_on(h, "p0", "finish")
+	h.tick(2.2)
+	_eq(_msgs(h, "finish", "p0").size(), 1, "premier arrivé : arrivée")
+	h.game.on_player_message("p0", {"t": "restart", "to": "start"})
+	_eq(_msgs(h, "restart", "p0").size(), 0, "premier arrivé : pas de recommencer une fois arrivé")
+	var g: ParkourServer = h.game
+	var rp: Array = g._respawn_point(g.prog["p0"])
+	var fin: Dictionary = g.els[g.finishes[0]]
+	_ok(absf(rp[0] - fin["pos"][0]) < 1.0 and absf(rp[2] - fin["pos"][2]) < 1.0, "premier arrivé : réapparition sur l'arrivée")
+	_on(h, "p1", "checkpoint")
+	h.tick(2.5)
+	_eq(_msgs(h, "cp", "p1").size(), 1, "checkpoint validé")
+	h.game.on_player_message("p1", {"t": "restart", "to": "cp"})
+	_eq(_msgs(h, "restart", "p1").back()["cp"], 0, "recommencer au checkpoint")
+	h.tick(2.6)
+	_eq(_msgs(h, "cp", "p1").size(), 1, "pas de checkpoint revalidé juste après")
+	h.game.on_player_message("p1", {"t": "restart", "to": "start"})
+	_eq(_msgs(h, "restart", "p1").back()["cp"], -1, "recommencer au départ")
+
+	# meilleur temps : chrono par essai, retour automatique au départ, record conservé, fin à la durée seulement
+	h = _parkour(lv, parkour_settings({"mode": "best", "duration": 30, "hurry": 10}), 2, false)
+	_eq(h.init["mode"], "best", "mode meilleur temps")
+	h.tick(3.0)
+	_on(h, "p0", "finish")
+	h.tick(3.1)
+	var f1: Dictionary = _msgs(h, "finish", "p0")[0]
+	_ok(absf(f1["time"] - 2.0) < 0.1 and f1["record"], "meilleur temps : premier essai %.2f s" % f1["time"])
+	_eq(h.of("hurry").size(), 0, "meilleur temps : pas d'accélération")
+	h.tick(6.2)
+	var r: Array = _msgs(h, "restart", "p0")
+	_eq(r.size(), 1, "meilleur temps : retour automatique au départ")
+	h.tick(7.0)
+	_eq(_msgs(h, "finish", "p0").size(), 1, "meilleur temps : pas d'arrivée tant qu'on n'a pas quitté l'arrivée")
+	_on(h, "p0", "start")
+	h.tick(9.0)
+	_on(h, "p0", "finish")
+	h.tick(10.0)
+	var f2: Dictionary = _msgs(h, "finish", "p0")[1]
+	_ok(not f2["record"] and absf(f2["best"] - f1["time"]) < 1e-6, "meilleur temps : le record reste le premier essai")
+	_ok(not h.ended, "meilleur temps : la manche continue")
+	_on(h, "p1", "checkpoint")
+	h.tick(31.5)
+	_ok(h.ended, "meilleur temps : fin à la durée")
+	var res: Array = h.game.get_results()
+	_eq(res[0]["id"], "p0", "meilleur temps : p0 premier")
+	_ok(str(res[0]["label"]).contains("2 arrivées"), "meilleur temps : libellé %s" % res[0]["label"])
+	_eq(res[1]["label"], "Checkpoint 1/%d" % g.cps.size(), "meilleur temps : p1 au checkpoint")
+	print("modes du parcours : OK")
+
+
 # ---------- parcours : logique serveur avec de faux joueurs ----------
 
 func _v3(extra := {}, n := 2) -> Harness:
@@ -282,7 +361,7 @@ func _test_vague3_rules() -> void:
 	s = _v3()
 	var keys: Array = s.init.keys()
 	keys.sort()
-	_eq(keys, ["coins", "cps", "endAt", "jostle", "level"], "init sans disposition")
+	_eq(keys, ["coins", "cps", "endAt", "jostle", "level", "mode"], "init sans disposition")
 	s.tick(2.0)
 	var mi := _idx(s, "memoire")
 	var me := _el(s, mi)

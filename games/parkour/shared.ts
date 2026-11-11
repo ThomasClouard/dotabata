@@ -6,8 +6,9 @@ import { fanAccel, inZone, launchVelocity, lowgravAt, windAccel, zipCable, zipFe
 export const parkourMeta: GameMeta = {
   id: 'parkour',
   name: 'Parcours délirant',
-  description: 'Course d\'obstacles : marteaux, barres tournantes, trampolines… Le premier à l\'arrivée gagne.',
+  description: 'Course d\'obstacles : marteaux, barres tournantes, trampolines… Le premier à l\'arrivée gagne, ou le meilleur temps : on refait le parcours autant qu\'on veut.',
   settings: {
+    mode: { type: 'choice', label: 'Mode', default: 'first', options: ['first', 'best'], labels: ['Premier arrivé', 'Meilleur temps'] },
     duration: { type: 'number', label: 'Durée de la manche', default: 150, min: 45, max: 300, step: 15, unit: 's' },
     hurry: { type: 'number', label: 'Temps restant après le premier arrivé', default: 40, min: 10, max: 120, step: 5, unit: 's' },
     levels: { type: 'multi', label: 'Niveaux autorisés', default: [], options: [] },
@@ -22,6 +23,7 @@ export interface ParkourInit {
   cps: number[]; // index des checkpoints dans level.elements
   jostle: boolean; // bousculades entre joueurs (réglage de la manche) : false = on se traverse
   coins: boolean; // les pièces départagent le classement
+  mode: 'first' | 'best'; // premier arrivé, ou meilleur temps (on recommence autant qu'on veut)
 }
 
 export interface ContactEvents {

@@ -15,7 +15,9 @@ Deux mini-jeux pour l'instant :
   - interactions : boutons et portes, leviers et trappes, dalles mémoire piégées, boîtes surprise (super saut, bouclier, banane, gant de boxe), pièces ;
   - décor : arbres, ballons, foule, panneaux, brouillard, faux murs (raccourcis secrets).
 
-  Réglages de la manche en plus de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
+  Deux **modes** : *Premier arrivé* (le premier à franchir l'arrivée gagne ; les autres ont encore un peu de temps pour finir) ou *Meilleur temps* (pendant toute la manche, on refait le parcours autant qu'on veut : chaque arrivée renvoie au départ au bout de 3 s, et seul le meilleur essai compte). À tout moment, on peut revenir au dernier checkpoint (R) ou recommencer au départ (T), ce qui relance le chrono de l'essai en mode meilleur temps. Une fois arrivé, on devient un fantôme : on ne bouscule plus ceux qui arrivent et, en mode premier arrivé, une chute ramène sur l'arrivée.
+
+  Réglages de la manche en plus du mode, de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
 
   ![Départ du niveau « fête foraine » : les concurrents s'élancent sous l'arche, entre deux rangées de spectateurs](docs/captures/parcours.jpg)
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
@@ -70,6 +72,8 @@ Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godo
 | Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) | Stick gauche |
 | Sauter | Espace | A |
 | Parcours — utiliser l'objet tenu | E ou clic droit | X |
+| Parcours — revenir au dernier checkpoint | R | LB |
+| Parcours — recommencer au départ | T | Select |
 | Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches | Stick droit |
 | Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
 | Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |

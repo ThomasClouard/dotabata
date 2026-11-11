@@ -88,6 +88,9 @@ static func sanitize_settings(raw: Variant, metas: Array) -> Dictionary:
 						dst[k] = clampf(n, def["min"], def["max"])
 				"bool":
 					dst[k] = _truthy(v)
+				"choice":
+					if v is String and def["options"].has(v):
+						dst[k] = v
 				"multi":
 					if v is Array:
 						var arr: Array = []

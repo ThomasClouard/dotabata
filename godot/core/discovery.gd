@@ -2,7 +2,6 @@ class_name Discovery
 extends Node
 ## Recherche des serveurs Dotabata! du réseau local : envoie « dotabata? » en UDP (broadcast et boucle locale)
 ## sur les ports Protocol.PORT … PORT + PORT_SPAN - 1 toutes les 2 s, et tient la liste des serveurs qui répondent.
-## Indisponible sur le web.
 
 signal changed
 
@@ -14,16 +13,12 @@ var _udp: PacketPeerUDP
 var _next := 0.0
 
 
-static func supported() -> bool:
-	return not OS.has_feature("web")
-
-
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
 func start() -> void:
-	if not supported() or _udp != null:
+	if _udp != null:
 		return
 	_udp = PacketPeerUDP.new()
 	_udp.set_broadcast_enabled(true)

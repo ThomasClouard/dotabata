@@ -1,7 +1,6 @@
 class_name ParkourServer
 extends ServerGame
 ## Parcours délirant — autorité serveur : checkpoints, arrivées, chrono, classement, bots.
-## Portage de games/parkour/server.ts.
 
 ## Cibles sans surface : on y entre (ventilateur) ou elles nous emportent (canon, téléporteur, tyrolienne).
 const ZONE_TARGETS := ["fan", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]

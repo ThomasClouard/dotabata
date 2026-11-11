@@ -36,7 +36,7 @@ godot --path godot --rendering-method gl_compatibility --rendering-driver opengl
 ```
 
 Le menu Options propose trois niveaux de graphismes (légers, moyens, élevés). Au premier lancement,
-les puces intégrées Intel et le web démarrent en « moyens », les autres en « élevés ».
+les puces intégrées Intel démarrent en « moyens », les autres en « élevés ».
 
 ## Réseau
 
@@ -49,8 +49,6 @@ les puces intégrées Intel et le web démarrent en « moyens », les autres en 
   ferme le serveur. Le mot de passe n'est jamais renvoyé aux clients.
 - Windows demande d'autoriser le jeu sur le réseau au premier serveur créé : il faut accepter pour les réseaux
   privés, sinon les autres PC ne voient ni ne rejoignent le serveur.
-- Le web ne peut ni héberger ni découvrir (pas de sockets serveur ni d'UDP dans un navigateur) : il rejoint par
-  adresse.
 
 Fichiers du dossier utilisateur (`user://`, soit `%APPDATA%\Godot\app_userdata\Dotabata!\` sous Windows) :
 `jeux.cfg` (profil, graphismes, options, dernière adresse, réglages du serveur hébergé), `last-settings.json` (derniers
@@ -64,12 +62,12 @@ réglages de partie de l'hôte), `levels/parkour/` (niveaux perso, en plus de ce
 - léger flou des lointains, façon maquette ;
 - membres des personnages déformés dans le vertex shader (plus aucun recalcul de maillage par image).
 
-Ces effets demandent le moteur Forward+ et le niveau « élevés ». Le web et le moteur Compatibilité
-gardent les ombres, le halo et la mer, sans occlusion ambiante, reflets ni flou.
+Ces effets demandent le moteur Forward+ et le niveau « élevés ». Le moteur Compatibilité
+garde les ombres, le halo et la mer, sans occlusion ambiante, reflets ni flou.
 
 ## Options de lancement
 
-Après `--` sur bureau, ou dans l'URL sur le web (`?server=…&bots=9`) :
+Après `--` :
 
 | Option | Effet |
 |---|---|
@@ -139,8 +137,7 @@ changement dans `godot/sim/` ou `godot/server/`.
 Les modèles d'export de Godot doivent être installés (éditeur : Éditeur → Gérer les modèles d'export).
 Sous Windows, `compiler.cmd` à la racine du dépôt fait tout : il trouve Godot dans le PATH ou dans son
 installation winget, installe si besoin les modèles d'export de cette version (`tools/install-templates.ps1`,
-téléchargés depuis les versions officielles de Godot sur GitHub, environ 1,3 Go), importe les ressources puis exporte ;
-`compiler.cmd web` exporte aussi la version web.
+téléchargés depuis les versions officielles de Godot sur GitHub, environ 1,3 Go), importe les ressources puis exporte.
 À la main :
 
 ```bash
@@ -149,14 +146,6 @@ godot --headless --path godot --export-release "Windows Desktop" build/windows/D
 
 L'exe contient tout (niveaux de `levels/parkour/` et `config/defaults.json` compris) : c'est le seul fichier à
 copier sur les PC des joueurs.
-
-```bash
-godot --headless --path godot --export-release "Web" build/web/index.html
-```
-
-La version web se sert avec un petit serveur statique, `node godot/tools/serve-web.mjs` (port 8080). Elle se
-connecte au serveur de jeu de la machine qui sert la page (port 3000), hébergé par un exe lancé sur ce PC. La
-page doit être servie en `http://` : en `https://`, le navigateur refuserait la connexion `ws://`.
 
 ## Organisation
 
@@ -174,7 +163,7 @@ page doit être servie en `http://` : en `https://`, le navigateur refuserait la
 | `audio/` | 17 sons synthétisés au démarrage |
 | `levels/parkour/` | niveaux de parcours (écrits aussi par le MCP) |
 | `config/` | réglages de partie par défaut |
-| `tests/`, `tools/` | tests du serveur et de parité, vecteurs de référence, serveur web statique |
+| `tests/`, `tools/` | tests du serveur et de parité, vecteurs de référence, installation des modèles d'export |
 
 Ajouter un mini-jeu : sa fiche dans `server/metas.gd`, sa classe `ServerGame` dans `server/games/`, sa classe
 `ClientGame` dans `games/<nom>/` inscrite dans `core/registry.gd` (détails dans le README racine).

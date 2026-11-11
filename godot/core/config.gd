@@ -1,8 +1,7 @@
 class_name Config
 extends RefCounted
 ## Profil, qualité graphique et adresse du serveur (fichier user://jeux.cfg),
-## plus les options de lancement : `-- --server=hôte:port --bots=9 --autostart --shot=chemin.png --shot-at=8`
-## sur bureau, `?server=…&bots=9` dans l'URL sur le web.
+## plus les options de lancement : `-- --server=hôte:port --bots=9 --autostart --shot=chemin.png --shot-at=8`.
 
 const PATH := "user://jeux.cfg"
 
@@ -74,7 +73,7 @@ static func save() -> void:
 
 ## Applique le plein écran et le volume (la sensibilité est lue à chaque image par la caméra).
 static func apply_options() -> void:
-	if not OS.has_feature("web") and DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless":
 		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		var mode := DisplayServer.window_get_mode()
 		var is_full := mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
@@ -84,10 +83,8 @@ static func apply_options() -> void:
 	AudioServer.set_bus_mute(0, sfx_volume <= 0.001)
 
 
-## Premier lancement : les puces graphiques intégrées et le web démarrent en « moyens ».
+## Premier lancement : les puces graphiques intégrées démarrent en « moyens ».
 static func _default_quality() -> int:
-	if OS.has_feature("web"):
-		return 1
 	var gpu := RenderingServer.get_video_adapter_name().to_lower()
 	for k: String in ["intel", "uhd", "iris", "llvmpipe", "swiftshader", "basic render"]:
 		if gpu.contains(k):
@@ -104,20 +101,6 @@ static func msaa_breaks_screen_fx() -> bool:
 	return RegEx.create_from_string("radeon (hd [78]\\d{3}|r[579] (2|3)\\d{2}|r9 fury|r9 nano)|amd fury").search(gpu) != null
 
 
-## Adresse « hôte:port » du serveur de jeu à essayer en premier.
-static func default_server() -> String:
-	if args.has("server"):
-		return str(args["server"])
-	if OS.has_feature("web"):
-		# sur le web, le serveur de jeu est a priori sur la machine qui sert la page
-		var host: Variant = JavaScriptBridge.eval("location.hostname")
-		if typeof(host) == TYPE_STRING and host != "":
-			return "%s:3000" % host
-	if server != "":
-		return server
-	return "localhost:3000"
-
-
 static func arg_int(key: String, default := 0) -> int:
 	return int(str(args[key])) if args.has(key) else default
 
@@ -131,13 +114,4 @@ static func _parse_args() -> Dictionary:
 			out[s] = "1"
 		else:
 			out[s.left(eq)] = s.substr(eq + 1)
-	if OS.has_feature("web"):
-		var q: Variant = JavaScriptBridge.eval("location.search")
-		if typeof(q) == TYPE_STRING:
-			for part in str(q).trim_prefix("?").split("&", false):
-				var eq := part.find("=")
-				if eq < 0:
-					out[part] = "1"
-				else:
-					out[part.left(eq)] = part.substr(eq + 1).uri_decode()
 	return out

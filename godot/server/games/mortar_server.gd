@@ -1,7 +1,6 @@
 class_name MortarServer
 extends ServerGame
 ## Abri & mortier — autorité serveur : construction, obus, explosions, dégâts, caisses, zone, bots.
-## Portage de games/mortar/server.ts.
 
 
 

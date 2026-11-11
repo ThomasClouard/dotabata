@@ -1,11 +1,10 @@
 ﻿# Installe les modèles d'export de Godot s'ils manquent (utilisé par compiler.cmd).
-#   install-templates.ps1 -Godot <chemin de godot.exe> [-Web] [-Yes]
+#   install-templates.ps1 -Godot <chemin de godot.exe> [-Yes]
 # Les modèles viennent de la page officielle des versions de Godot (GitHub), pour la version exacte de l'éditeur
 # installé, et vont là où l'éditeur les range : %APPDATA%\Godot\export_templates\<version>\.
 # Code de sortie : 0 = modèles présents, 1 = échec, 2 = installation refusée.
 param(
     [Parameter(Mandatory = $true)][string]$Godot,
-    [switch]$Web,
     [switch]$Yes
 )
 $ErrorActionPreference = 'Stop'
@@ -31,7 +30,6 @@ $tag = "$num-$status"
 $dest = Join-Path $env:APPDATA "Godot\export_templates\$folder"
 
 $needed = @('windows_release_x86_64.exe')
-if ($Web) { $needed += 'web_nothreads_release.zip' }
 $missing = @($needed | Where-Object { -not (Test-Path (Join-Path $dest $_)) })
 if ($missing.Count -eq 0) { exit 0 }
 

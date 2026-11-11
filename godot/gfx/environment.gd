@@ -1,7 +1,7 @@
 class_name GameEnv
 extends Node3D
 ## Ciel, soleil, brouillard, mer, nuages et post-traitement. Les réglages s'adaptent au moteur de rendu
-## (Forward+ sur bureau, Compatibilité sur le web) et au niveau de qualité choisi.
+## (Forward+, ou Compatibilité si la carte graphique l'impose) et au niveau de qualité choisi.
 
 const SUN_DIR := Vector3(0.45, 0.8, 0.35)
 
@@ -65,7 +65,7 @@ func _ready() -> void:
 	add_child(sea)
 
 	if not forward_plus:
-		# le moteur Compatibilité (web) éclaire plus fort à réglages égaux : on compense
+		# le moteur Compatibilité éclaire plus fort à réglages égaux : on compense
 		sun.light_energy = 0.7
 		env.ambient_light_energy = 0.42
 		env.tonemap_white = 4.0

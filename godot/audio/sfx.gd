@@ -1,6 +1,6 @@
 class_name Sfx
 extends Node
-## Sons entièrement synthétisés au démarrage (aucun fichier à charger) : portage de client/src/audio.ts.
+## Sons entièrement synthétisés au démarrage (aucun fichier à charger).
 ## Chaque effet est rendu une fois en PCM 16 bits dans un AudioStreamWAV, puis rejoué à la demande.
 
 const RATE := 22050

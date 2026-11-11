@@ -1,7 +1,6 @@
 class_name ParkourClient
 extends ClientGame
 ## Parcours délirant — côté client : décor du niveau, obstacles animés, réactions du joueur local, HUD.
-## Portage de games/parkour/client.ts.
 
 const PASTELS := [0xff8fab, 0xffc971, 0x7fd8f0, 0xa5e07a, 0xc9a8e8, 0xfde68a, 0x8fb8ff]
 const CORNERS := [[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]]

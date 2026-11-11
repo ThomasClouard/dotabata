@@ -143,6 +143,10 @@ func _boot() -> void:
 		_show_menu()
 
 
+func _exit_tree() -> void:
+	Cursors.finish()  # au cas où on quitte avant la fin du dessin des curseurs
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		# fermeture de la fenêtre : on prévient les joueurs connectés à notre serveur avant de quitter

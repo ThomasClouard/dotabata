@@ -10,13 +10,15 @@ const OUTLINE := 1.15  # demi-épaisseur du contour d'encre (pixels)
 const RIM := 1.0  # liseré blanc autour du contour
 const SS := 3  # suréchantillonnage par côté
 
+static var _task := -1  # tâche de dessin en cours (WorkerThreadPool) : à attendre avant de quitter
+
 
 ## Remplace les curseurs du système (sans effet si la plateforme ne le permet pas, ou sans écran).
 ## Le dessin (une demi-seconde) se fait sur un fil de travail pour ne pas retarder le démarrage.
 static func install() -> void:
 	if DisplayServer.get_name() == "headless" or not DisplayServer.has_feature(DisplayServer.FEATURE_CUSTOM_CURSOR_SHAPE):
 		return
-	WorkerThreadPool.add_task(func() -> void: _apply.call_deferred(_build()))
+	_task = WorkerThreadPool.add_task(func() -> void: _apply.call_deferred(_build()))
 
 
 ## [image, forme, point actif] pour chaque curseur.
@@ -32,7 +34,15 @@ static func _build() -> Array:
 	]
 
 
+## Attend la fin du dessin. Godot exige qu'une tâche du WorkerThreadPool soit attendue : sinon il plante en quittant.
+static func finish() -> void:
+	if _task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
+
+
 static func _apply(cursors: Array) -> void:
+	finish()
 	for c: Array in cursors:
 		Input.set_custom_mouse_cursor(c[0], c[1], c[2])
 

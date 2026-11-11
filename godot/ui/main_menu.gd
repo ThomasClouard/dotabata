@@ -14,7 +14,7 @@ signal spin(amount: float)
 signal quit_requested
 signal sound(key: String)
 
-const SCREENS := ["titre", "jouer", "creer", "personnage", "options"]
+const SCREENS := ["titre", "jouer", "creer", "personnage", "options", "manette"]
 const HAT_NAMES := {
 	"haricot": "Haricot", "casquette": "Casquette", "spaghetti": "Spaghetti", "hélice": "Hélice",
 	"bouée": "Bouée", "crochet": "Crochet", "bandeau": "Bandeau", "arche": "Arche",
@@ -32,6 +32,9 @@ var _modal := ColorRect.new()
 var _modal_card := PanelContainer.new()
 var _t := 0.0
 var _dots: Label  # indicateur de recherche animé
+var _capturing := ""  # action de manette en attente d'un bouton (écran Manette)
+var _capture_at := 0.0  # instant à partir duquel on accepte le bouton (pas celui qui a ouvert l'attente)
+var _capture_btn: Button
 
 
 func _ready() -> void:
@@ -102,6 +105,7 @@ func jump_to(name: String) -> void:
 ## Remplace l'écran affiché. dir : 1 = on avance (arrive de la droite), -1 = on revient, 0 = sans glissement.
 func _show(name: String, dir: int) -> void:
 	_modal.visible = false
+	_capturing = ""
 	var old := _screen
 	_screen = _build(name)
 	add_child(_screen)
@@ -142,7 +146,31 @@ func _build(name: String) -> Control:
 			return _screen_character()
 		"options":
 			return _screen_options()
+		"manette":
+			return _screen_pad()
 	return _screen_title()
+
+
+## Reconstruit l'écran courant sur place (sans glissement), en gardant le focus sur le contrôle marqué focus_id.
+func refresh(focus_id := "") -> void:
+	if not visible or _stack.is_empty():
+		return
+	_show(_stack[-1], 0)
+	if focus_id != "":
+		(func() -> void:
+			var f := _find_meta(_screen, "bind", focus_id)
+			if f:
+				f.grab_focus()).call_deferred()
+
+
+static func _find_meta(c: Node, key: String, value: String) -> Control:
+	for k in c.get_children():
+		if k is Control and k.get_meta(key, "") == value:
+			return k
+		var sub := _find_meta(k, key, value)
+		if sub:
+			return sub
+	return null
 
 
 ## Donne le focus au premier contrôle de l'écran (ou de la fenêtre modale), pour le clavier et la manette.
@@ -288,6 +316,9 @@ func _screen_title() -> Control:
 	foot.add_child(UI.outlined("%s · %s" % [Config.profile["name"], HAT_NAMES.get(Config.profile["hat"], Config.profile["hat"])], 20, Color.WHITE, 7))
 	_count = UI.outlined("", 18, UI.YELLOW, 7)
 	foot.add_child(_count)
+	var version := str(ProjectSettings.get_setting("application/config/version", ""))
+	if version != "":  # renseignée par la compilation sur GitHub à partir du tag (v1.2.0)
+		foot.add_child(UI.outlined("v" + version, 16, Color.WHITE, 6))
 	root.add_child(foot)
 	_update_count()
 	return root
@@ -733,8 +764,121 @@ func _screen_options() -> Control:
 		sound.emit("tick")))
 	v.add_child(_slider("Sensibilité de la souris", Config.mouse_sens, 0.25, 3.0, func(x: float) -> String: return "× %.2f" % x, func(x: float) -> void:
 		Config.mouse_sens = x))
+	v.add_child(UI.h2("Manette"))
+	var pad_b := UI.button("Configurer la manette…", "", func() -> void: push("manette"))
+	pad_b.focus_mode = Control.FOCUS_ALL
+	v.add_child(_sounds(pad_b))
 	v.add_child(_wrap("Les réglages sont enregistrés tout de suite.", 13, UI.MUTED))
 	return p[0]
+
+
+# ---------- Manette : boutons réglables ----------
+
+func _screen_pad() -> Control:
+	var p := _side_panel("Manette", 600, true)
+	var v: VBoxContainer = p[1]
+	var dev := Pad.device()
+	var status := _wrap("Manette branchée : %s" % Input.get_joy_name(dev) if dev >= 0 else "Aucune manette branchée : branche-la pour tester tes réglages.", 14, Color("#38b000") if dev >= 0 else UI.ACCENT)
+	v.add_child(status)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.follow_focus = true
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 8)
+	scroll.add_child(list)
+	v.add_child(scroll)
+	var first := true
+	for group: Array in [["menu", "Dans les menus"], ["jeu", "En jeu"]]:
+		list.add_child(UI.h2(group[1]))
+		for a: Dictionary in Pad.ACTIONS:
+			if a["group"] != group[0]:
+				continue
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 10)
+			var l := UI.label(a["name"], 16)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size.x = 160
+			row.add_child(l)
+			var id: String = a["id"]
+			var b := UI.button(Pad.label(Pad.bindings.get(id, a["default"])), "", Callable())
+			b.focus_mode = Control.FOCUS_ALL
+			b.custom_minimum_size = Vector2(170, 40)
+			b.add_theme_font_size_override("font_size", 18)
+			b.set_meta("bind", id)
+			if first:
+				b.set_meta("first", true)
+				first = false
+			b.pressed.connect(func() -> void: _start_capture(id, b))
+			row.add_child(_sounds(b))
+			list.add_child(row)
+	list.add_child(UI.h2("Caméra"))
+	list.add_child(_slider("Vitesse (stick droit)", Pad.look_sens, 0.25, 3.0, func(x: float) -> String: return "× %.2f" % x, func(x: float) -> void:
+		Pad.look_sens = x))
+	var inv := CheckBox.new()
+	inv.text = "Inverser l'axe vertical"
+	inv.add_theme_font_size_override("font_size", 16)
+	inv.focus_mode = Control.FOCUS_ALL
+	inv.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	inv.button_pressed = Pad.invert_y
+	inv.toggled.connect(func(on: bool) -> void:
+		Pad.invert_y = on
+		Config.save())
+	list.add_child(_sounds(inv))
+	var reset_b := UI.button("Rétablir les réglages par défaut", "", func() -> void:
+		Pad.reset()
+		Config.save()
+		sound.emit("remove")
+		refresh("reset"))
+	reset_b.focus_mode = Control.FOCUS_ALL
+	reset_b.set_meta("bind", "reset")
+	list.add_child(_sounds(reset_b))
+	list.add_child(_wrap("Choisis une action, puis appuie sur le bouton de la manette à lui donner (Échap pour annuler). Si un autre bouton de la même catégorie l'utilisait déjà, les deux s'échangent. Le stick gauche déplace, le stick droit tourne la caméra.", 13, UI.MUTED))
+	return p[0]
+
+
+func _start_capture(id: String, b: Button) -> void:
+	_capturing = id
+	_capture_btn = b
+	_capture_at = _t + 0.25
+	b.text = "Appuie sur un bouton…"
+	UI.mark_selected(b, UI.ACCENT)
+
+
+func _end_capture(code: int) -> void:
+	var id := _capturing
+	_capturing = ""
+	if code >= 0:
+		Pad.assign(id, code)
+		Config.save()
+		sound.emit("pickup")
+	else:
+		sound.emit("remove")
+	refresh(id)
+
+
+## Attente d'un bouton (écran Manette) : on intercepte tout avant les menus, y compris B (sinon « retour »).
+func _input(ev: InputEvent) -> void:
+	if _capturing == "" or not visible:
+		return
+	if ev is InputEventJoypadButton:
+		get_viewport().set_input_as_handled()
+		if ev.pressed and _t >= _capture_at:
+			_end_capture(ev.button_index)
+	elif ev is InputEventJoypadMotion and (ev.axis == JOY_AXIS_TRIGGER_LEFT or ev.axis == JOY_AXIS_TRIGGER_RIGHT):
+		get_viewport().set_input_as_handled()
+		if ev.axis_value > 0.6 and _t >= _capture_at:
+			_end_capture(Pad.LT if ev.axis == JOY_AXIS_TRIGGER_LEFT else Pad.RT)
+	elif ev is InputEventJoypadMotion:
+		get_viewport().set_input_as_handled()  # pas de navigation pendant l'attente
+	elif ev is InputEventKey and ev.pressed and not ev.echo:
+		get_viewport().set_input_as_handled()
+		if ev.physical_keycode == KEY_ESCAPE:
+			_end_capture(-1)
+	elif ev is InputEventMouseButton and ev.pressed:
+		_end_capture(-1)
 
 
 ## Ligne « libellé, curseur, valeur ». L'enregistrement se fait au relâchement.

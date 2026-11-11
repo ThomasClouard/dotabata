@@ -116,6 +116,16 @@ func _ready() -> void:
 	ui.leave_pressed.connect(_on_leave)
 	ui.server_cfg_changed.connect(func(cfg: Dictionary) -> void: net.send({"t": "server", "name": cfg["name"], "max": cfg["max"], "password": cfg["password"]}))
 	discovery.changed.connect(func() -> void: ui.menu.update_servers(discovery.list()))
+	ui.pad_nav_changed.connect(func(on: bool) -> void:
+		input.set_process_unhandled_input(not on)  # la manette règle le panneau au lieu de faire courir le personnage
+		if on:
+			input.release_mouse()
+		if _lobby != null and _phase == "lobby":
+			ui.render_lobby(_lobby, my_id))
+	Input.joy_connection_changed.connect(func(_d: int, _c: bool) -> void:
+		_update_chrome()
+		if ui.menu.current() == "manette":
+			ui.menu.refresh())
 	get_tree().set_auto_accept_quit(false)
 	_boot()
 
@@ -128,6 +138,10 @@ func _boot() -> void:
 		_create_server(Config.server_cfg)
 	else:
 		_show_menu()
+
+
+func _exit_tree() -> void:
+	Cursors.finish()  # au cas où on quitte avant la fin du dessin des curseurs
 
 
 func _notification(what: int) -> void:
@@ -334,6 +348,7 @@ func _reset_session() -> void:
 	_waiting = false
 	_bots_applied = false
 	_autostarted = false
+	ui.exit_pad_nav()
 	ui.lobby.visible = false
 	ui.wait.visible = false
 	ui.stop.visible = false
@@ -458,13 +473,18 @@ func _is_host() -> bool:
 
 
 func _update_chrome() -> void:
+	if ui.pad_nav and (_phase != "lobby" or _waiting):
+		ui.exit_pad_nav()
 	ui.lobby.visible = _phase == "lobby" and not _waiting
 	ui.wait.visible = _waiting
 	var in_game := _phase != "lobby" and _phase != "boot" and _phase != "menu"
 	ui.stop.visible = _is_host() and in_game
 	ui.server_btn.visible = _is_host() and host != null and in_game
 	ui.leave.visible = in_game or (_waiting and _phase != "boot")
-	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
+	var hint := "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
+	if Pad.device() >= 0:
+		hint = "Stick gauche : bouger · %s : sauter · Stick droit : caméra · %s : utiliser" % [Pad.label(Pad.bindings["sauter"]), Pad.label(Pad.bindings["utiliser"])]
+	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else hint
 
 
 func _meta(game_id: String) -> Dictionary:
@@ -591,6 +611,8 @@ func _process(delta: float) -> void:
 	var t := net.now()
 	input.begin_frame()
 	_debug.drive(dt)
+	if _phase == "lobby" and input.hit("PadPanel"):
+		ui.enter_pad_nav()
 
 	if _phase == "menu":
 		_menu_frame(dt)
@@ -600,6 +622,9 @@ func _process(delta: float) -> void:
 	# caméra : souris, ou flèches du clavier
 	cam_yaw -= input.dx * 0.0028 * Config.mouse_sens + (_b2i(input.down("ArrowRight")) - _b2i(input.down("ArrowLeft"))) * 2.0 * dt
 	_cam_pitch += input.dy * 0.0022 * Config.mouse_sens + (_b2i(input.down("ArrowUp")) - _b2i(input.down("ArrowDown"))) * 1.2 * dt
+	# stick droit de la manette
+	cam_yaw -= input.look.x * 2.6 * Pad.look_sens * dt
+	_cam_pitch += input.look.y * 1.6 * Pad.look_sens * dt * (-1.0 if Pad.invert_y else 1.0)
 	_cam_pitch = clampf(_cam_pitch, -0.3, 1.3)
 
 	var mine := me()
@@ -607,8 +632,8 @@ func _process(delta: float) -> void:
 		_cols = _game.colliders(t)
 		if _active:
 			var frozen := _phase == "round" and t < start_at
-			var f := _b2i(input.down("KeyW")) - _b2i(input.down("KeyS"))
-			var r := _b2i(input.down("KeyD")) - _b2i(input.down("KeyA"))
+			var f := _b2i(input.down("KeyW")) - _b2i(input.down("KeyS")) - input.move.y  # stick gauche : analogique
+			var r := _b2i(input.down("KeyD")) - _b2i(input.down("KeyA")) + input.move.x
 			var fx := sin(cam_yaw)
 			var fz := cos(cam_yaw)
 			var mx := fx * f - fz * r

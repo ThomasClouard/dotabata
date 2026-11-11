@@ -396,6 +396,8 @@ func on_frame(dt: float) -> void:
 		for k in 3:
 			if inp.hit("Digit%d" % (k + 1), "Numpad%d" % (k + 1)):
 				mat = MortarShared.MAT_KEYS[k]
+		if inp.hit("PadMat"):  # manette : matériau suivant
+			mat = MortarShared.MAT_KEYS[(MortarShared.MAT_KEYS.find(mat) + 1) % MortarShared.MAT_KEYS.size()]
 		var cell: Variant = _aim_cell()
 		if cell != null and cell.y < MortarShared.MAX_H:
 			var c := MortarShared.block_center(my_plot, cell.x, cell.y, cell.z, n)

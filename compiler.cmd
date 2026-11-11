@@ -24,7 +24,10 @@ if not defined GODOT (
 )
 
 rem --- modeles d'export de la version de Godot installee : telecharges une fois si besoin ---
-powershell -NoProfile -ExecutionPolicy Bypass -File godot\tools\install-templates.ps1 -Godot "%GODOT%"
+set "TPL_ARGS="
+rem compilation automatique (GitHub Actions) : pas de question, on telecharge directement
+if defined CI set "TPL_ARGS=%TPL_ARGS% -Yes"
+powershell -NoProfile -ExecutionPolicy Bypass -File godot\tools\install-templates.ps1 -Godot "%GODOT%" %TPL_ARGS%
 if errorlevel 2 (
   echo Compilation annulee : les modeles d'export sont necessaires.
   pause

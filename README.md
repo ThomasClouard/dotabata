@@ -1,6 +1,8 @@
 # 🎉 Dotabata! — party game LAN 3D
 
-Party game pour 2 à 10 joueurs sur le même réseau local. **Un seul programme** : chacun lance le jeu, l'un d'eux crée un serveur depuis l'accueil, les autres le voient apparaître dans leur liste et le rejoignent. Une partie enchaîne des manches de mini-jeux (10–15 min au total) avec classement cumulé et podium final.
+Party game pour 2 à 10 joueurs sur le même réseau local. **Un seul programme** : chacun lance le jeu, l'un d'eux crée une partie depuis le menu, les autres la voient apparaître dans leur liste et la rejoignent. Une partie enchaîne des manches de mini-jeux (10–15 min au total) avec classement cumulé et podium final.
+
+![Écran titre : le logo, les boutons du menu et ton personnage qui danse dans le décor](docs/captures/titre.jpg)
 
 *Dotabata* (ドタバタ) : en japonais, le chahut maladroit, tout le monde qui court et trébuche dans tous les sens.
 
@@ -14,7 +16,11 @@ Deux mini-jeux pour l'instant :
   - décor : arbres, ballons, foule, panneaux, brouillard, faux murs (raccourcis secrets).
 
   Réglages de la manche en plus de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
+
+  ![Départ du niveau « fête foraine » : les concurrents s'élancent sous l'arche, entre deux rangées de spectateurs](docs/captures/parcours.jpg)
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
+
+  <img src="docs/captures/mortier-construction.jpg" width="49%" alt="Construction de l'abri en blocs de bois sur son île"> <img src="docs/captures/mortier-bataille.jpg" width="49%" alt="Bataille : la jauge de tir se charge, les obus volent entre les îles">
 
 Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le lancer depuis les sources, ses options et l'export.
 
@@ -25,36 +31,62 @@ Sous Windows, à la racine du dépôt :
 - `compiler.cmd` (double-clic) compile le jeu en un seul exe, `godot/build/windows/Dotabata.exe`. Il faut Godot 4.7 (`winget install GodotEngine.GodotEngine`) ; s'il manque ses modèles d'export, le script propose de les télécharger (environ 1,3 Go, une seule fois). Ferme le jeu avant de recompiler ;
 - `lancer.cmd` (double-clic) ouvre le jeu : l'exe compilé s'il existe, sinon Godot sur les sources.
 
-L'exe compilé se suffit à lui-même : c'est le seul fichier à copier sur les PC des joueurs, rien d'autre à installer pour jouer. Recompile après chaque modification du jeu ou ajout de niveau.
+L'exe compilé se suffit à lui-même : c'est le seul fichier à copier sur les PC des joueurs, rien d'autre à installer pour jouer (ni Godot, ni Node). Il lui faut Windows 64 bits et une carte graphique compatible Vulkan ou Direct3D 12 (presque tous les PC récents). L'exe n'étant pas signé, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : « Informations complémentaires » puis « Exécuter quand même ». Tous les joueurs doivent avoir la même version. Recompile après chaque modification du jeu ou ajout de niveau, ou télécharge l'exe d'une version publiée (voir [Publier une version](#publier-une-version)).
+
+### Le menu
+
+<img src="docs/captures/parties.jpg" width="49%" alt="Écran Jouer : une partie trouvée sur le réseau local, avec ses places, ses bots et son ping"> <img src="docs/captures/personnage.jpg" width="49%" alt="Écran Personnage : carrousel des personnages, pseudo et bouton Valider">
 
 Le menu principal s'ouvre sur l'écran titre, avec ton personnage qui danse dans le décor :
 
 - **Jouer** : les parties du réseau local, trouvées toutes seules (nom, places, « en partie », mot de passe, ping), ou **Rejoindre par adresse** (`192.168.1.20:3000`) pour une partie d'un autre sous-réseau ou derrière un VPN ;
 - **Créer une partie** : nom, nombre de joueurs maximum, mot de passe facultatif ;
 - **Personnage** : choix parmi les 8 personnages et pseudo ;
-- **Options** : graphismes, plein écran, volume des effets, sensibilité de la souris ;
+- **Options** : graphismes, plein écran, volume des effets, sensibilité de la souris, boutons de la manette ;
 - **Quitter**.
 
 Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir) ou à la manette.
 
-Celui qui crée le serveur en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
+### Le lobby
 
-Quitter le jeu ou « Fermer le serveur » arrête la partie pour tout le monde (les autres reviennent à l'accueil avec un message).
+![Lobby : le panneau de réglages de la partie à gauche, les joueurs et les bots qui gambadent sur le terrain](docs/captures/lobby.jpg)
 
-Au premier serveur créé, Windows demande d'autoriser Dotabata! sur le réseau : accepte pour les **réseaux privés**, sinon les autres PC ne le verront pas. Le serveur utilise le port 3000 (TCP pour le jeu, UDP pour la découverte), ou le suivant libre jusqu'à 3009.
+Celui qui crée la partie en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
+
+Quitter le jeu ou « Fermer le serveur » arrête la partie pour tout le monde (les autres reviennent au menu avec un message).
+
+À la première partie créée, Windows demande d'autoriser Dotabata! sur le réseau : accepte pour les **réseaux privés**, sinon les autres PC ne le verront pas. Le serveur utilise le port 3000 (TCP pour le jeu, UDP pour la découverte), ou le suivant libre jusqu'à 3009.
 
 Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godot/config/defaults.json) ; les derniers réglages de l'hôte sont mémorisés dans le dossier utilisateur du jeu (`%APPDATA%\Godot\app_userdata\Dotabata!\`).
 
 ### Commandes
 
-| Action | Touches |
-| --- | --- |
-| Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) |
-| Sauter | Espace |
-| Parcours — utiliser l'objet tenu | E ou clic droit |
-| Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches |
-| Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau |
-| Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer |
+| Action | Clavier et souris | Manette (par défaut) |
+| --- | --- | --- |
+| Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) | Stick gauche |
+| Sauter | Espace | A |
+| Parcours — utiliser l'objet tenu | E ou clic droit | X |
+| Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches | Stick droit |
+| Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
+| Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |
+| Menus | Flèches, Entrée, Échap | Croix ou stick gauche, A : valider, B : retour |
+| Lobby — régler la partie | Souris | Start, puis croix pour choisir, A pour valider, gauche / droite pour les nombres, B ou Start pour revenir au terrain |
+
+Les boutons de la manette se changent dans **Options → Configurer la manette** (avec la vitesse de la caméra au stick et l'inversion de l'axe vertical).
+
+## Publier une version
+
+Pousser un tag de version fait compiler l'exe par GitHub (workflow [.github/workflows/exe.yml](.github/workflows/exe.yml)) et le publie dans l'onglet **Releases** du dépôt, prêt à télécharger :
+
+```bash
+git tag v1.2.0
+```
+
+```bash
+git push origin v1.2.0
+```
+
+Le numéro (forme `v1.2.3`) est inscrit dans les propriétés de l'exe et affiché en bas de l'écran titre. Chaque pull request est aussi compilée (l'exe est alors dans les artefacts du workflow, onglet **Actions**), et on peut lancer une compilation à la main depuis cet onglet.
 
 ## Développement
 
@@ -80,6 +112,9 @@ godot/            le jeu : client (rendu, personnages, interface) et serveur int
 godot/server/     serveur : session (lobby, manches, scores), règles serveur des mini-jeux, bots, découverte LAN
 godot/sim/        physique maison, cinématique des obstacles, règles partagées (portées à l'identique du TypeScript)
 godot/levels/parkour/*.json   niveaux de parcours (livrés dans l'exe)
+compiler.cmd, lancer.cmd      compiler l'exe, lancer le jeu (Windows)
+.github/workflows/exe.yml     compilation sur GitHub : exe des pull requests, versions publiées à chaque tag
+docs/captures/    captures d'écran du README
 shared/src/       référence TypeScript : physique, format + validation des niveaux, scores
 games/<id>/shared.ts          référence TypeScript des règles partagées de chaque mini-jeu
 mcp/src/          serveur MCP pour créer des niveaux

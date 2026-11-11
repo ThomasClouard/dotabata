@@ -42,6 +42,7 @@ static func load_all() -> void:
 	fullscreen = bool(cf.get_value("options", "plein_ecran", false))
 	sfx_volume = clampf(float(cf.get_value("options", "volume", 0.8)), 0.0, 1.0)
 	mouse_sens = clampf(float(cf.get_value("options", "souris", 1.0)), 0.25, 3.0)
+	Pad.load_cfg(cf)
 	if args.has("name"):
 		profile["name"] = str(args["name"]).left(16)
 	if args.has("hat") and Protocol.HATS.has(args["hat"]):
@@ -66,6 +67,7 @@ static func save() -> void:
 	cf.set_value("options", "plein_ecran", fullscreen)
 	cf.set_value("options", "volume", sfx_volume)
 	cf.set_value("options", "souris", mouse_sens)
+	Pad.save_cfg(cf)
 	cf.save(PATH)
 
 

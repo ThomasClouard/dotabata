@@ -83,8 +83,9 @@ static func init_theme() -> void:
 	for c in ["up_disabled_icon_modulate", "down_disabled_icon_modulate"]:
 		t.set_color(c, "SpinBox", Color("#b5b0c4"))
 
-	for st in ["normal", "hover", "pressed", "focus"]:
+	for st in ["normal", "hover", "pressed"]:
 		t.set_stylebox(st, "OptionButton", field if st != "hover" else field_focus)
+	t.set_stylebox("focus", "OptionButton", focus_ring(10))
 	t.set_stylebox("disabled", "OptionButton", field_off)
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "OptionButton", INK)

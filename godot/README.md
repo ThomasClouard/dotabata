@@ -1,7 +1,7 @@
 # Dotabata! — le jeu (Godot 4)
 
-Tout le jeu est ici, **serveur compris** : accueil avec la liste des serveurs du réseau local, création d'un
-serveur, lobby, Parcours délirant, Abri & mortier, écran des scores, podium. Chaque exe peut héberger une partie
+Tout le jeu est ici, **serveur compris** : menu principal avec la liste des parties du réseau local, création
+d'une partie, lobby, Parcours délirant, Abri & mortier, écran des scores, podium. Chaque exe peut héberger une partie
 (`server/`) ou rejoindre celle d'un autre. Tout est procédural (aucune image, aucun son, aucun modèle à charger).
 
 ## Lancer
@@ -16,7 +16,7 @@ Le menu principal (`ui/main_menu.gd`, décor `scenes/menu_scene.gd`) s'ouvre sur
 danse dans le décor, à côté des boutons **Jouer** (parties du réseau local, qui apparaissent toutes seules, ou
 rejoindre par adresse, `192.168.1.20:3000` par exemple), **Créer une partie** (nom, joueurs max, mot de passe
 facultatif), **Personnage** (carrousel des 8 personnages, pseudo), **Options** (graphismes, plein écran, volume,
-sensibilité de la souris) et **Quitter**. Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir)
+sensibilité de la souris, manette) et **Quitter**. Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir)
 ou à la manette (croix, A, B). Le créateur d'une partie en est l'hôte : il règle la partie au lobby, et les réglages
 du serveur à tout moment, même pendant une manche.
 
@@ -84,8 +84,8 @@ Après `--` :
 | `--auto`, `--auto=fire` | pilote automatique (court et saute, ou reste sur place et tire) |
 | `--shot=chemin.png --shot-at=5,12` | captures d'écran à ces instants, puis quitte |
 | `--looks=x,y,z,lacet,tangage,dist;…` | vue imposée 1,2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z) |
-| `--menu=jouer|creer|personnage|options` | ouvre directement cet écran du menu |
-| `--keys=3:ui_down,3.3:ui_accept` | navigation simulée dans les menus (action d'interface à cet instant) |
+| `--menu=jouer\|creer\|personnage\|options\|manette` | ouvre directement cet écran du menu |
+| `--keys=3:ui_down,3.3:ui_accept,4:joy0` | navigation simulée : action d'interface ou bouton de manette (`joyN`) à cet instant |
 | `--trace`, `--quit-at=30`, `--vsync=off` | mesures et arrêt automatique |
 
 Exemple : une manche de mortier contre neuf bots, avec deux captures.
@@ -149,7 +149,7 @@ copier sur les PC des joueurs.
 
 | Dossier | Rôle |
 |---|---|
-| `core/` | boucle, phases, accueil, réseau, découverte LAN, entrées, options |
+| `core/` | boucle, phases, réseau, découverte LAN, entrées clavier / souris / manette (`pad.gd` : boutons réglables), options |
 | `server/` | serveur intégré : WebSocket et découverte (`host.gd`), session (`session.gd`), scores, niveaux sur le disque, validateur, fiches des jeux |
 | `server/games/` | règles serveur et bots des deux mini-jeux |
 | `sim/` | physique, obstacles, règles partagées (float 64 bits) |
@@ -157,7 +157,7 @@ copier sur les PC des joueurs.
 | `gfx/` | matériaux, formes, textures, ciel, mer, particules, shaders |
 | `games/` | affichage des deux mini-jeux |
 | `scenes/` | terrain du lobby, décor du menu, podium |
-| `ui/` | thème, logo, menu principal, lobby, scores, podium, HUD |
+| `ui/` | thème, logo, curseurs de souris, menu principal, lobby, scores, podium, HUD |
 | `audio/` | 17 sons synthétisés au démarrage |
 | `levels/parkour/` | niveaux de parcours (écrits aussi par le MCP) |
 | `config/` | réglages de partie par défaut |

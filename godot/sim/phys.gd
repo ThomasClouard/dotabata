@@ -2,7 +2,7 @@ class_name Phys
 extends RefCounted
 ## Physique maison, portée à l'identique de shared/src/physics.ts :
 ## une capsule verticale contre des boîtes orientées (lacet seul).
-## Tout est calculé en float 64 bits (pas de Vector3) pour rester aligné sur les clients navigateur.
+## Tout est calculé en float 64 bits (pas de Vector3) pour rester aligné sur la référence TypeScript.
 
 const GRAVITY := 24.0
 const SPEED := 7.0

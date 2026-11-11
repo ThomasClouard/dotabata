@@ -1,7 +1,7 @@
 class_name Net
 extends Node
 ## Connexion WebSocket au serveur de jeu (hébergé par un joueur, voir ServerHost) + synchronisation de l'horloge
-## serveur (les obstacles en dépendent). Portage de client/src/net.ts.
+## serveur (les obstacles en dépendent).
 
 signal message(m: Dictionary)
 signal opened
@@ -40,8 +40,7 @@ func connect_to(address: String, hello: Dictionary) -> void:
 	if not url.contains("://"):
 		url = "ws://" + url
 	# le serveur n'écoute qu'en IPv4 : « localhost » peut se résoudre en ::1 et ne jamais répondre
-	if not OS.has_feature("web"):
-		url = url.replace("://localhost", "://127.0.0.1")
+	url = url.replace("://localhost", "://127.0.0.1")
 	if not url.ends_with("/ws"):
 		url = url.trim_suffix("/") + "/ws"
 	_hello = hello

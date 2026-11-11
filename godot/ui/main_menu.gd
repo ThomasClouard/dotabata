@@ -20,7 +20,6 @@ const HAT_NAMES := {
 	"bouée": "Bouée", "crochet": "Crochet", "bandeau": "Bandeau", "arche": "Arche",
 }
 
-var can_host := true
 var scanning := true
 var last_address := ""
 var _stack: Array[String] = []
@@ -272,12 +271,10 @@ func _screen_title() -> Control:
 	var play := UI.menu_button("Jouer", func() -> void: push("jouer"), true)
 	play.set_meta("first", true)
 	col.add_child(_sounds(play))
-	if can_host:
-		col.add_child(_sounds(UI.menu_button("Créer une partie", func() -> void: push("creer"))))
+	col.add_child(_sounds(UI.menu_button("Créer une partie", func() -> void: push("creer"))))
 	col.add_child(_sounds(UI.menu_button("Personnage", func() -> void: push("personnage"))))
 	col.add_child(_sounds(UI.menu_button("Options", func() -> void: push("options"))))
-	if not OS.has_feature("web"):
-		col.add_child(_sounds(UI.menu_button("Quitter", func() -> void: quit_requested.emit())))
+	col.add_child(_sounds(UI.menu_button("Quitter", func() -> void: quit_requested.emit())))
 
 	# bas de l'écran : qui je suis, parties trouvées
 	var foot := HBoxContainer.new()
@@ -405,13 +402,12 @@ func _empty_state() -> Control:
 	var txt := _wrap("Les parties lancées sur le réseau local apparaîtront ici toutes seules." if scanning else "La recherche automatique n'est pas disponible ici : indique l'adresse de la partie ci-dessous.", 15, UI.MUTED)
 	txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(txt)
-	if can_host:
-		var b := UI.menu_button("Créer une partie", func() -> void:
-			_stack.pop_back()
-			push("creer"))
-		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		b.set_meta("first", true)
-		v.add_child(_sounds(b))
+	var b := UI.menu_button("Créer une partie", func() -> void:
+		_stack.pop_back()
+		push("creer"))
+	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	b.set_meta("first", true)
+	v.add_child(_sounds(b))
 	return v
 
 
@@ -717,19 +713,18 @@ func _screen_options() -> Control:
 	v.add_child(q_row)
 	v.add_child(_wrap("« Légers » et « moyens » soulagent les petites cartes graphiques.", 13, UI.MUTED))
 
-	if not OS.has_feature("web"):
-		v.add_child(UI.h2("Écran"))
-		var fs := CheckBox.new()
-		fs.text = "Plein écran"
-		fs.add_theme_font_size_override("font_size", 16)
-		fs.focus_mode = Control.FOCUS_ALL
-		fs.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		fs.button_pressed = Config.fullscreen
-		fs.toggled.connect(func(on: bool) -> void:
-			Config.fullscreen = on
-			Config.apply_options()
-			Config.save())
-		v.add_child(_sounds(fs))
+	v.add_child(UI.h2("Écran"))
+	var fs := CheckBox.new()
+	fs.text = "Plein écran"
+	fs.add_theme_font_size_override("font_size", 16)
+	fs.focus_mode = Control.FOCUS_ALL
+	fs.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	fs.button_pressed = Config.fullscreen
+	fs.toggled.connect(func(on: bool) -> void:
+		Config.fullscreen = on
+		Config.apply_options()
+		Config.save())
+	v.add_child(_sounds(fs))
 
 	v.add_child(UI.h2("Son et contrôles"))
 	v.add_child(_slider("Volume des effets", Config.sfx_volume, 0.0, 1.0, func(x: float) -> String: return "%d %%" % roundi(x * 100.0), func(x: float) -> void:

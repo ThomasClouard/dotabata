@@ -1,6 +1,4 @@
 node_modules
-client/dist
-config/last-settings.json
 godot/build/
 godot/.godot/
 .claude/settings.local.json

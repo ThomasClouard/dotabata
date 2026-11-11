@@ -2,7 +2,7 @@ class_name Main
 extends Node3D
 ## Cœur du client : accueil (serveurs du réseau local, création d'un serveur), caméra troisième personne,
 ## personnage local, réseau, enchaînement lobby → manches → podium.
-## Portage de client/src/main.ts. Ce nœud sert aussi de contexte (« ctx ») aux mini-jeux.
+## Ce nœud sert aussi de contexte (« ctx ») aux mini-jeux.
 
 const H := 1.0 / 60.0  # pas fixe de la physique, comme le client d'origine
 
@@ -91,7 +91,6 @@ func _ready() -> void:
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
 	ui.quality_toggled.connect(_toggle_quality)
 	var menu := ui.menu
-	menu.can_host = Discovery.supported()
 	menu.join_requested.connect(_join)
 	menu.create_requested.connect(_create_server)
 	menu.profile_changed.connect(func(p: Dictionary) -> void:
@@ -125,8 +124,6 @@ func _ready() -> void:
 func _boot() -> void:
 	if Config.args.has("server"):
 		_connect(str(Config.args["server"]))
-	elif OS.has_feature("web"):
-		_connect(Config.default_server())  # le serveur est a priori sur la machine qui sert la page
 	elif Config.args.has("host") or Config.args.has("bots") or Config.args.has("autostart"):
 		_create_server(Config.server_cfg)
 	else:

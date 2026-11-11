@@ -5,6 +5,8 @@ extends ServerGame
 ## Cibles sans surface : on y entre (ventilateur) ou elles nous emportent (canon, téléporteur, tyrolienne).
 const ZONE_TARGETS := ["fan", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]
 const ITEM := ParkourShared.ITEM
+## Mode « meilleur temps » : délai entre l'arrivée et le retour automatique au départ.
+const RESTART_DELAY := 3.0
 
 static var last_level := ""
 
@@ -17,6 +19,13 @@ class Progress extends RefCounted:
 	var item := ""  # objet tenu ("" = rien)
 	var shield_until := 0.0
 	var last_killed := 0.0
+	var run_start := 0.0  # début de l'essai en cours (mode meilleur temps)
+	var best := -1.0  # meilleur temps (mode meilleur temps)
+	var runs := 0  # arrivées (mode meilleur temps)
+	var max_cp := -1  # checkpoint le plus loin atteint, tous essais confondus
+	var restart_at := -1.0  # retour automatique au départ après une arrivée (mode meilleur temps)
+	var grace_until := 0.0  # juste après « recommencer » : la position reçue est encore l'ancienne, on ne valide rien
+	var away := true  # a quitté l'arrivée depuis le dernier « recommencer » (sinon pas de nouvelle arrivée)
 
 
 class Bot extends RefCounted:
@@ -51,6 +60,7 @@ var memories: Array = []
 var boxes: Array = []
 var coin_els: Array = []
 var finished_count := 0
+var best_mode := false  # réglage « mode » : false = premier arrivé, true = meilleur temps (on recommence à volonté)
 var _cols: Array = []
 var _solid: Array = []  # sans les `hazard` : les bots ne prennent pas la lave pour un sol
 var _cols_at := -1.0
@@ -308,20 +318,22 @@ func _spawn_at(el_idx: int, k: int, n: int) -> Array:
 	return [e["pos"][0] + (col - (per_row - 1) / 2.0) * sx, Level.top_of(e) + 0.05, e["pos"][2] + (row - (per_row - 1) / 2.0) * sz]
 
 
-func _respawn_point(cp: int) -> Array:
-	var e: Dictionary = els[start_idx if cp < 0 else cps[cp]]
+## Point de réapparition : dernier checkpoint, départ, ou l'arrivée pour qui a déjà fini (premier arrivé).
+func _respawn_point(pr: Progress) -> Array:
+	var on_finish := pr.finished_at >= 0.0 and not best_mode
+	var e: Dictionary = els[finishes[0] if on_finish else (start_idx if pr.cp < 0 else cps[pr.cp])]
 	return [e["pos"][0] + (randf() - 0.5) * 1.5, Level.top_of(e) + 0.1, e["pos"][2] + (randf() - 0.5) * 1.5]
 
 
 func _respawn_bot(b: Phys.Body, bot: Bot, pr: Progress) -> void:
-	var p := _respawn_point(pr.cp)
+	var p := _respawn_point(pr)
 	b.set_pos(p[0], p[1], p[2])
 	b.vx = 0.0
 	b.vy = 0.0
 	b.vz = 0.0
 	b.tumble = 0.0
 	Phys.clear_motion_state(b)
-	bot.path_idx = maxi(0, path.find(start_idx if pr.cp < 0 else cps[pr.cp]))
+	bot.path_idx = path.size() - 1 if pr.finished_at >= 0.0 else maxi(0, path.find(start_idx if pr.cp < 0 else cps[pr.cp]))
 	bot.stuck = 0.0
 	# hésitation aléatoire : évite de retomber indéfiniment dans le même obstacle au même moment du cycle
 	bot.wait_until = ctx.now() + randf() * 1.5
@@ -454,7 +466,7 @@ func _use_item(id: String) -> void:
 		# gant de boxe : repousse les joueurs proches devant soi
 		var hit: Array = []
 		for q: ServerPlayer in ctx.players.values():
-			if q.id == id or not prog.has(q.id):
+			if q.id == id or not prog.has(q.id) or prog[q.id].finished_at >= 0.0:
 				continue
 			var dx: float = q.p[0] - pl.p[0]
 			var dz: float = q.p[2] - pl.p[2]
@@ -475,7 +487,7 @@ func _banana_tick(t: float) -> void:
 			by = "-"
 		elif t >= bn["arm_at"]:
 			for q: ServerPlayer in ctx.players.values():
-				if not prog.has(q.id):
+				if not prog.has(q.id) or prog[q.id].finished_at >= 0.0:
 					continue
 				if _hypot(q.p[0] - bn["p"][0], q.p[2] - bn["p"][2]) > ITEM["bananaR"] or absf(q.p[1] - bn["p"][1]) > 0.6:
 					continue
@@ -566,6 +578,7 @@ func start_with(lv: Dictionary) -> Dictionary:
 			"start":
 				start_idx = i
 	kill_y = Level.kill_y(level)
+	best_mode = ctx.settings.get("mode", "first") == "best"
 	end_at = ctx.start_at + float(ctx.settings.get("duration", 150))
 	buttons = _by_type("button")
 	levers = _by_type("lever")
@@ -580,13 +593,15 @@ func start_with(lv: Dictionary) -> Dictionary:
 	for p: ServerPlayer in ctx.players.values():
 		spawns[p.id] = _spawn_at(start_idx, k, ctx.players.size())
 		k += 1
-		prog[p.id] = Progress.new()
+		var pr := Progress.new()
+		pr.run_start = ctx.start_at
+		prog[p.id] = pr
 		if p.is_bot:
 			var bot := Bot.new()
 			bot.pace = 0.7 + randf() * 0.3
 			bot.wait_until = ctx.start_at + randf() * 0.8
 			bots[p.id] = bot
-	var init := {"level": level, "endAt": end_at, "cps": cps, "jostle": ctx.settings.get("jostle") != false, "coins": ctx.settings.get("coins") != false}
+	var init := {"level": level, "endAt": end_at, "cps": cps, "jostle": ctx.settings.get("jostle") != false, "coins": ctx.settings.get("coins") != false, "mode": "best" if best_mode else "first"}
 	return {"init": init, "spawns": spawns}
 
 
@@ -597,15 +612,35 @@ func on_tick(_dt: float) -> void:
 	_banana_tick(t)
 	for p: ServerPlayer in ctx.players.values():
 		var pr: Progress = prog.get(p.id)
-		if pr == null or pr.finished_at >= 0.0:
+		if pr == null:
 			continue
+		if pr.restart_at >= 0.0 and t >= pr.restart_at:
+			restart(p.id, true)
+		if pr.finished_at >= 0.0 or t < pr.grace_until:
+			continue
+		if not pr.away:
+			pr.away = not finishes.any(func(f: int) -> bool: return Level.on_pad(els[f], p.p[0], p.p[1], p.p[2]))
+			if not pr.away:
+				continue
 		_interactions(p, pr, t)
 		for k in range(cps.size() - 1, pr.cp, -1):
 			if Level.on_pad(els[cps[k]], p.p[0], p.p[1], p.p[2]):
 				pr.cp = k
+				pr.max_cp = maxi(pr.max_cp, k)
 				ctx.broadcast({"t": "cp", "id": p.id, "k": k})
 				break
 		for f: int in finishes:
+			if Level.on_pad(els[f], p.p[0], p.p[1], p.p[2]) and best_mode:
+				# meilleur temps : chrono de l'essai, record éventuel, puis retour au départ dans quelques secondes
+				var run := t - pr.run_start
+				var record := pr.best < 0.0 or run < pr.best
+				if record:
+					pr.best = run
+				pr.runs += 1
+				pr.finished_at = t - ctx.start_at
+				pr.restart_at = t + RESTART_DELAY
+				ctx.broadcast({"t": "finish", "id": p.id, "time": run, "best": pr.best, "record": record, "runs": pr.runs})
+				break
 			if Level.on_pad(els[f], p.p[0], p.p[1], p.p[2]):
 				pr.finished_at = t - ctx.start_at
 				finished_count += 1
@@ -615,8 +650,32 @@ func on_tick(_dt: float) -> void:
 					end_at = t + hurry
 					ctx.broadcast({"t": "hurry", "endAt": end_at})
 				break
-	if t >= end_at or (prog.size() > 0 and finished_count >= prog.size()):
+	if t >= end_at or (not best_mode and prog.size() > 0 and finished_count >= prog.size()):
 		ctx.end()
+
+
+## Recommencer : au départ (to_start) ou au dernier checkpoint. Premier arrivé : impossible une fois arrivé.
+## Meilleur temps : repartir du départ relance le chrono de l'essai.
+func restart(id: String, to_start: bool) -> void:
+	var pr: Progress = prog.get(id)
+	var t := ctx.now()
+	if pr == null or t < ctx.start_at or (pr.finished_at >= 0.0 and not best_mode):
+		return
+	if pr.finished_at >= 0.0:
+		to_start = true
+	if to_start:
+		pr.cp = -1
+		if best_mode:
+			pr.run_start = t
+	pr.finished_at = -1.0
+	pr.restart_at = -1.0
+	pr.grace_until = t + 0.6
+	pr.away = false
+	var bot: Bot = bots.get(id)
+	var pl: ServerPlayer = ctx.players.get(id)
+	if bot != null and pl != null and pl.body != null:
+		_respawn_bot(pl.body, bot, pr)
+	ctx.broadcast({"t": "restart", "id": id, "cp": pr.cp, "runStart": pr.run_start})
 
 
 func on_player_message(id: String, msg: Dictionary) -> void:
@@ -629,13 +688,15 @@ func on_player_message(id: String, msg: Dictionary) -> void:
 		_cosmetic_hit(id)
 	elif mt == "use":
 		_use_item(id)
+	elif mt == "restart":
+		restart(id, msg.get("to") == "start")
 	elif mt == "killed" and is_int and int(mi) >= 0 and int(mi) < els.size() and els[int(mi)]["type"] == "hazard":
 		_relay_killed(id, int(mi))
 
 
 func on_player_leave(id: String) -> void:
 	var pr: Progress = prog.get(id)
-	if pr != null and pr.finished_at >= 0.0:
+	if pr != null and pr.finished_at >= 0.0 and not best_mode:
 		finished_count -= 1
 	prog.erase(id)
 	bots.erase(id)
@@ -655,6 +716,9 @@ func get_results() -> Array:
 	# pièces : départagent les temps égaux (au dixième affiché) et les checkpoints égaux, si le réglage le veut
 	var use_coins: bool = ctx.settings.get("coins") != false
 	var coin_cmp := func(a: Dictionary, b: Dictionary) -> int: return (b["pr"].coins.size() - a["pr"].coins.size()) if use_coins else 0
+	var with_coins := func(label: String, n: int) -> String: return ("%s · %d pièce%s" % [label, n, "s" if n > 1 else ""]) if n > 0 else label
+	if best_mode:
+		return _best_results(rows, coin_cmp, with_coins)
 	var done := rows.filter(func(r: Dictionary) -> bool: return r["pr"].finished_at >= 0.0)
 	var rest := rows.filter(func(r: Dictionary) -> bool: return r["pr"].finished_at < 0.0)
 	done.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -673,13 +737,42 @@ func get_results() -> Array:
 		if c != 0:
 			return c < 0
 		return a["dist"] < b["dist"])
-	var with_coins := func(label: String, n: int) -> String: return ("%s · %d pièce%s" % [label, n, "s" if n > 1 else ""]) if n > 0 else label
 	var groups: Array = []
 	for r: Dictionary in done:
 		groups.append([{"id": r["id"], "label": with_coins.call(ParkourShared.format_time(r["pr"].finished_at), r["pr"].coins.size())}])
 	for r: Dictionary in rest:
 		var pr: Progress = r["pr"]
 		groups.append([{"id": r["id"], "label": with_coins.call("Checkpoint %d/%d" % [pr.cp + 1, cps.size()] if pr.cp >= 0 else "Pas arrivé", pr.coins.size())}])
+	return Scoring.ranks_from_groups(groups)
+
+
+## Classement du mode meilleur temps : record (au dixième, puis pièces), sinon checkpoint le plus loin atteint.
+func _best_results(rows: Array, coin_cmp: Callable, with_coins: Callable) -> Array:
+	var done := rows.filter(func(r: Dictionary) -> bool: return r["pr"].best >= 0.0)
+	var rest := rows.filter(func(r: Dictionary) -> bool: return r["pr"].best < 0.0)
+	done.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ta := roundi(a["pr"].best * 10.0)
+		var tb := roundi(b["pr"].best * 10.0)
+		if ta != tb:
+			return ta < tb
+		var c: int = coin_cmp.call(a, b)
+		if c != 0:
+			return c < 0
+		return a["pr"].best < b["pr"].best)
+	rest.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["pr"].max_cp != b["pr"].max_cp:
+			return a["pr"].max_cp > b["pr"].max_cp
+		var c: int = coin_cmp.call(a, b)
+		if c != 0:
+			return c < 0
+		return a["dist"] < b["dist"])
+	var groups: Array = []
+	for r: Dictionary in done:
+		var pr: Progress = r["pr"]
+		groups.append([{"id": r["id"], "label": with_coins.call("%s (%d arrivée%s)" % [ParkourShared.format_time(pr.best), pr.runs, "s" if pr.runs > 1 else ""], pr.coins.size())}])
+	for r: Dictionary in rest:
+		var pr: Progress = r["pr"]
+		groups.append([{"id": r["id"], "label": with_coins.call("Checkpoint %d/%d" % [pr.max_cp + 1, cps.size()] if pr.max_cp >= 0 else "Pas arrivé", pr.coins.size())}])
 	return Scoring.ranks_from_groups(groups)
 
 
@@ -871,8 +964,8 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 	# bousculades avec les autres joueurs (réglage de la manche)
 	if ctx.settings.get("jostle") != false:
 		for q: ServerPlayer in ctx.players.values():
-			if q.id != pl.id and prog.has(q.id):
-				Phys.jostle(b, q.p[0], q.p[1], q.p[2], q.v[0], q.v[2])
+			if q.id != pl.id and prog.has(q.id) and pr.finished_at < 0.0 and prog[q.id].finished_at < 0.0:
+				Phys.jostle(b, q.p[0], q.p[1], q.p[2], q.v[0], q.v[2])  # ceux qui ont fini ne gênent personne
 	if mx != 0.0 or mz != 0.0:
 		pl.yaw = atan2(mx, mz)
 	pl.flags = (Protocol.FLAG_GROUNDED if b.grounded or b.coyote > 0.0 else 0) | (Protocol.FLAG_TUMBLE if b.tumble > 0.0 else 0) | Protocol.pose_flags(b)

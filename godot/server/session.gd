@@ -244,8 +244,15 @@ func on_message(me: ServerPlayer, msg: Dictionary) -> void:
 				set_server_cfg(msg)
 		"bots":
 			if host and phase == "lobby":
-				var n: Variant = msg.get("n")
-				_set_bots(int(n) if (n is float or n is int) else 0)
+				var rid: Variant = msg.get("remove")
+				if rid is String:
+					# retirer un bot précis (croix sur sa carte au lobby)
+					var b: ServerPlayer = players.get(rid)
+					if b != null and b.is_bot:
+						players.erase(rid)
+				else:
+					var n: Variant = msg.get("n")
+					_set_bots(int(n) if (n is float or n is int) else 0)
 				send_lobby()
 		"start":
 			if host and phase == "lobby":

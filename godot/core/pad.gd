@@ -14,10 +14,12 @@ const DEADZONE := 0.2
 const ACTIONS := [
 	{"id": "valider", "name": "Valider", "group": "menu", "default": JOY_BUTTON_A, "ui": "ui_accept"},
 	{"id": "retour", "name": "Retour", "group": "menu", "default": JOY_BUTTON_B, "ui": "ui_cancel"},
-	{"id": "sauter", "name": "Sauter", "group": "jeu", "default": JOY_BUTTON_A, "key": "Space"},
+	{"id": "sauter", "name": "Sauter · décoller et rétro-fusées (saut cosmique)", "group": "jeu", "default": JOY_BUTTON_A, "key": "Space"},
 	{"id": "utiliser", "name": "Utiliser l'objet (parcours)", "group": "jeu", "default": JOY_BUTTON_X, "key": "KeyE"},
 	{"id": "action", "name": "Poser un bloc / tirer (mortier)", "group": "jeu", "default": RT, "key": "KeyF"},
-	{"id": "retirer", "name": "Retirer un bloc (mortier)", "group": "jeu", "default": LT, "key": "KeyR"},
+	{"id": "retirer", "name": "Retirer un bloc (mortier) · viser précisément (saut cosmique)", "group": "jeu", "default": LT, "key": "PadRemove"},
+	{"id": "checkpoint", "name": "Revenir au checkpoint (parcours)", "group": "jeu", "default": JOY_BUTTON_LEFT_SHOULDER, "key": "PadCp"},
+	{"id": "depart", "name": "Recommencer au départ (parcours)", "group": "jeu", "default": JOY_BUTTON_BACK, "key": "PadStart"},
 	{"id": "materiau", "name": "Changer de matériau (mortier)", "group": "jeu", "default": JOY_BUTTON_Y, "key": "PadMat"},
 	{"id": "panneau", "name": "Régler la partie (lobby)", "group": "jeu", "default": JOY_BUTTON_START, "key": "PadPanel"},
 ]

@@ -53,6 +53,7 @@ export function sanitizeSettings(raw: any, metas: GameMeta[]): SessionSettings {
       if (def.type === 'number' && Number.isFinite(Number(v))) dst[k] = clamp(Number(v), def.min, def.max);
       else if (def.type === 'bool') dst[k] = !!v;
       else if (def.type === 'multi' && Array.isArray(v)) dst[k] = v.filter((x) => typeof x === 'string').slice(0, 100);
+      else if (def.type === 'choice' && typeof v === 'string' && def.options.includes(v)) dst[k] = v;
     }
     game[meta.id] = dst;
   }

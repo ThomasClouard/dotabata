@@ -83,13 +83,12 @@ func _ready() -> void:
 	net.message.connect(_on_message)
 	net.opened.connect(func() -> void: ui.hide_overlay())
 	net.closed.connect(_on_closed)
-	ui.profile_changed.connect(_on_profile)
 	ui.settings_changed.connect(func(s: Dictionary) -> void: net.send({"t": "settings", "settings": s}))
 	ui.bots_changed.connect(func(n: int) -> void: net.send({"t": "bots", "n": n}))
+	ui.bot_removed.connect(func(id: String) -> void: net.send({"t": "bots", "remove": id}))
 	ui.start_pressed.connect(func() -> void: net.send({"t": "start"}))
 	ui.stop_pressed.connect(func() -> void: net.send({"t": "stop"}))
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
-	ui.quality_toggled.connect(_toggle_quality)
 	var menu := ui.menu
 	menu.join_requested.connect(_join)
 	menu.create_requested.connect(_create_server)
@@ -120,6 +119,7 @@ func _ready() -> void:
 		input.set_process_unhandled_input(not on)  # la manette règle le panneau au lieu de faire courir le personnage
 		if on:
 			input.release_mouse()
+		_update_chrome()
 		if _lobby != null and _phase == "lobby":
 			ui.render_lobby(_lobby, my_id))
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool) -> void:
@@ -349,24 +349,11 @@ func _reset_session() -> void:
 	_bots_applied = false
 	_autostarted = false
 	ui.exit_pad_nav()
+	ui.close_game_settings()
 	ui.lobby.visible = false
 	ui.wait.visible = false
 	ui.stop.visible = false
 	ui.hide_banner()
-
-
-func _on_profile(p: Dictionary) -> void:
-	Config.profile = p
-	Config.save()
-	net.send({"t": "profile", "name": p["name"], "color": p["color"], "hat": p["hat"]})
-
-
-func _toggle_quality() -> void:
-	Config.quality = (Config.quality + 1) % 3
-	Config.save()
-	env.apply_quality(Config.quality)
-	if _lobby != null and _phase == "lobby":
-		ui.render_lobby(_lobby, my_id)
 
 
 # ---------- joueurs ----------
@@ -484,7 +471,16 @@ func _update_chrome() -> void:
 	var hint := "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
 	if Pad.device() >= 0:
 		hint = "Stick gauche : bouger · %s : sauter · Stick droit : caméra · %s : utiliser" % [Pad.label(Pad.bindings["sauter"]), Pad.label(Pad.bindings["utiliser"])]
-	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else hint
+	if _phase == "lobby" and not _waiting:
+		# aide du lobby, en bas à gauche sous le panneau
+		hint = "Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le terrain pour la capturer, Échap pour la libérer)"
+		if Pad.device() >= 0:
+			var start := Pad.label(Pad.bindings.get("panneau", JOY_BUTTON_START))
+			if ui.pad_nav:
+				hint = "Manette : croix pour choisir, %s pour valider, %s ou %s pour retourner sur le terrain" % [Pad.label(Pad.bindings["valider"]), Pad.label(Pad.bindings["retour"]), start]
+			else:
+				hint = "Stick gauche : bouger · %s : sauter · %s : panneau du lobby" % [Pad.label(Pad.bindings["sauter"]), start]
+	ui.corner.text = "" if _phase == "boot" or _phase == "menu" else hint
 
 
 func _meta(game_id: String) -> Dictionary:
@@ -652,7 +648,7 @@ func _process(delta: float) -> void:
 				_game.pre_step(body, H)
 				var contacts := Phys.step_body(body, mx, mz, jump, _cols, H)
 				for p: ClientPlayer in players.values():
-					if p != mine and p.pin == null and not p.hidden and not p.chr.dead:
+					if p != mine and p.pin == null and not p.hidden and not p.chr.dead and not _game.is_ghost(p.info["id"]) and not _game.is_ghost(my_id):
 						_game.jostle(body, p.pos, p.net_v)  # parcours : bousculade selon le réglage de la manche
 				_game.post_step(body, contacts, H)
 				if body.jumped:
@@ -671,7 +667,7 @@ func _process(delta: float) -> void:
 	_send_acc += dt
 	if _send_acc >= 1.0 / 30.0 and my_id != "":
 		_send_acc = 0.0
-		net.send_raw('{"t":"state","s":[%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f]}' % [body.px, body.py, body.pz, _my_yaw, mine.flags if mine else 0, body.vx, body.vy, body.vz])
+		net.send_raw('{"t":"state","s":[%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f]}' % [body.px, body.py, body.pz, _game.net_yaw(_my_yaw) if _game else _my_yaw, mine.flags if mine else 0, body.vx, body.vy, body.vz])
 
 	for p: ClientPlayer in players.values():
 		var is_me := p == mine
@@ -684,8 +680,10 @@ func _process(delta: float) -> void:
 			p.yaw = p.pin["yaw"]
 			dance = p.pin["dance"]
 		elif is_me:
-			speed = sqrt((body.vx - body.gvx) ** 2 + (body.vz - body.gvz) ** 2)
-			vy = body.vy
+			var mv := Vector3(body.vx - body.gvx, body.vy, body.vz - body.gvz)
+			var anim := _game.motion(body.pos(), mv) if _game else Vector2(Vector2(mv.x, mv.z).length(), mv.y)
+			speed = anim.x
+			vy = anim.y
 			flags = p.flags
 		else:
 			# autres joueurs : on glisse vers la dernière position reçue, légèrement extrapolée
@@ -695,8 +693,9 @@ func _process(delta: float) -> void:
 			else:
 				p.pos = p.pos.lerp(target, 1.0 - exp(-16.0 * dt))
 			p.yaw = _lerp_angle(p.yaw, p.net_yaw, 1.0 - exp(-12.0 * dt))
-			speed = sqrt(p.net_v.x * p.net_v.x + p.net_v.z * p.net_v.z)
-			vy = p.net_v.y
+			var anim := _game.motion(p.pos, p.net_v) if _game else Vector2(Vector2(p.net_v.x, p.net_v.z).length(), p.net_v.y)
+			speed = anim.x
+			vy = anim.y
 			flags = p.net_flags
 			p.flags = flags
 		var chr := p.chr

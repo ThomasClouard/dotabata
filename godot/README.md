@@ -1,7 +1,7 @@
 # Dotabata! — le jeu (Godot 4)
 
 Tout le jeu est ici, **serveur compris** : menu principal avec la liste des parties du réseau local, création
-d'une partie, lobby, Parcours délirant, Abri & mortier, écran des scores, podium. Chaque exe peut héberger une partie
+d'une partie, lobby, Parcours délirant, Abri & mortier, Saut cosmique, écran des scores, podium. Chaque exe peut héberger une partie
 (`server/`) ou rejoindre celle d'un autre. Tout est procédural (aucune image, aucun son, aucun modèle à charger).
 
 ## Lancer
@@ -35,7 +35,7 @@ Sur une petite carte graphique, le moteur de rendu « Compatibilité » est envi
 godot --path godot --rendering-method gl_compatibility --rendering-driver opengl3
 ```
 
-Le panneau du lobby propose trois niveaux de graphismes (légers, moyens, élevés). Au premier lancement,
+Le menu Options propose trois niveaux de graphismes (légers, moyens, élevés). Au premier lancement,
 les puces intégrées Intel démarrent en « moyens », les autres en « élevés ».
 
 ## Réseau
@@ -85,6 +85,7 @@ Après `--` :
 | `--shot=chemin.png --shot-at=5,12` | captures d'écran à ces instants, puis quitte |
 | `--looks=x,y,z,lacet,tangage,dist;…` | vue imposée 1,2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z) |
 | `--menu=jouer\|creer\|personnage\|options\|manette` | ouvre directement cet écran du menu |
+| `--reglages=partie\|parkour\|mortar\|serveur` | ouvre la fenêtre des réglages de la partie au lobby, sur cet onglet |
 | `--keys=3:ui_down,3.3:ui_accept,4:joy0` | navigation simulée : action d'interface ou bouton de manette (`joyN`) à cet instant |
 | `--trace`, `--quit-at=30`, `--vsync=off` | mesures et arrêt automatique |
 
@@ -100,13 +101,14 @@ Attention : `--games`, `--rounds` et `--set` envoient des réglages au serveur, 
 ## Tests
 
 Le serveur : parties complètes jouées par des bots sur les 7 niveaux et les niveaux d'essai, règles du parcours
-avec de faux joueurs (boutons, leviers, dalles mémoire, objets, pièces), bataille de mortier.
+avec de faux joueurs (boutons, leviers, dalles mémoire, objets, pièces), bataille de mortier, saut cosmique
+(planètes, atterrissages vérifiés, classement, parties de bots avec et sans attraction).
 
 ```bash
 godot --headless --path godot -s res://tests/run_server_tests.gd
 ```
 
-`-- --only=balade,mortier` ne lance que certains cas. Bout en bout : un vrai serveur sur un port, des clients
+`-- --only=balade,mortier,espace` ne lance que certains cas. Bout en bout : un vrai serveur sur un port, des clients
 WebSocket (hôte, mot de passe refusé puis accepté, serveur plein), la découverte UDP, les réglages du serveur
 modifiés avec un autre joueur connecté puis en pleine manche, la fermeture annoncée.
 

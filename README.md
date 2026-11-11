@@ -6,7 +6,7 @@ Party game pour 2 à 10 joueurs sur le même réseau local. **Un seul programme*
 
 *Dotabata* (ドタバタ) : en japonais, le chahut maladroit, tout le monde qui court et trébuche dans tous les sens.
 
-Deux mini-jeux pour l'instant :
+Trois mini-jeux pour l'instant :
 
 - **Parcours délirant** — course d'obstacles avec checkpoints, 7 niveaux : *balade*, *usine*, *vertige*, *fete-foraine*, *volcan*, *labo*, *chateau*. Éléments :
   - sols : plateformes, glace, tapis roulants, dalles friables, plateformes mobiles, rouleaux, plateaux tournants, grande roue, pistons, dalles clignotantes, boue, gélatine, rampes et toboggans, speed pads, bulles ;
@@ -15,12 +15,19 @@ Deux mini-jeux pour l'instant :
   - interactions : boutons et portes, leviers et trappes, dalles mémoire piégées, boîtes surprise (super saut, bouclier, banane, gant de boxe), pièces ;
   - décor : arbres, ballons, foule, panneaux, brouillard, faux murs (raccourcis secrets).
 
-  Réglages de la manche en plus de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
+  Deux **modes** : *Premier arrivé* (le premier à franchir l'arrivée gagne ; les autres ont encore un peu de temps pour finir) ou *Meilleur temps* (pendant toute la manche, on refait le parcours autant qu'on veut : chaque arrivée renvoie au départ au bout de 3 s, et seul le meilleur essai compte). À tout moment, on peut revenir au dernier checkpoint (R) ou recommencer au départ (T), ce qui relance le chrono de l'essai en mode meilleur temps. Une fois arrivé, on devient un fantôme : on ne bouscule plus ceux qui arrivent et, en mode premier arrivé, une chute ramène sur l'arrivée.
+
+  Réglages de la manche en plus du mode, de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
 
   ![Départ du niveau « fête foraine » : les concurrents s'élancent sous l'arche, entre deux rangées de spectateurs](docs/captures/parcours.jpg)
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
 
   <img src="docs/captures/mortier-construction.jpg" width="49%" alt="Construction de l'abri en blocs de bois sur son île"> <img src="docs/captures/mortier-bataille.jpg" width="49%" alt="Bataille : la jauge de tir se charge, les obus volent entre les îles">
+- **Saut cosmique** — tout le monde, casque d'astronaute sur la tête, démarre sur une petite planète ronde dont on peut faire le tour. Autour, des planètes d'arrivée plus ou moins lointaines : de 1 point pour la plus proche à 5 points pour la plus lointaine (et la plus petite). Pendant le temps imparti (30 s), chacun se place, vise et décolle quand il veut (A ou Espace) ; les retardataires décollent automatiquement à la fin. De courts pointillés montrent la première seconde de la trajectoire ; clic droit (ou LT) maintenu : visée précise à la longue-vue, avec un réticule dans l'axe exact du tir. Les planètes sont rangées par couloirs : derrière une planète proche, une plus lointaine, un peu décalée, permet de se rattraper si on rate la première. On vole lentement, toujours à la même vitesse : les rétro-fusées font seulement tourner la trajectoire vers la direction regardée, et le carburant ne permet de corriger que de quelques degrés (environ 9° avec le réglage par défaut). Toucher une planète, c'est s'y poser ; retomber sur la planète de départ ou se perdre dans l'espace ne rapporte rien. Classement : les points de la planète, puis, à points égaux, le premier posé.
+
+  Réglages : temps pour décoller, durée maximale du vol, carburant, nombre de planètes, **Attraction des planètes** (trajectoires courbes et effets de fronde ; désactivée, on vole en ligne droite) et **Collisions entre joueurs** (on rebondit les uns sur les autres en vol).
+
+  ![Visée sur la planète de départ : l'astronaute, son casque et ses fusées, et les courts pointillés du début de la trajectoire](docs/captures/espace.jpg)
 
 Le jeu est écrit avec Godot 4 : voir [godot/README.md](godot/README.md) pour le lancer depuis les sources, ses options et l'export.
 
@@ -49,9 +56,13 @@ Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir)
 
 ### Le lobby
 
-![Lobby : le panneau de réglages de la partie à gauche, les joueurs et les bots qui gambadent sur le terrain](docs/captures/lobby.jpg)
+![Lobby : à gauche les places de la partie (joueurs, bots, places libres) et le résumé des réglages ; les joueurs gambadent sur le terrain](docs/captures/lobby.jpg)
 
-Celui qui crée la partie en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
+Le panneau du lobby montre une case par place : les joueurs (l'hôte, toi, les bots), puis les places libres. Celui qui crée la partie en est l'hôte : il ajoute un bot dans la première place libre ou retire un bot précis (croix sur sa carte), et lance la partie. En dessous, un résumé de la partie (manches, ordre, jeux) et le bouton **Réglages de la partie…**, qui ouvre une fenêtre à onglets : *Partie* (nombre de manches, ordre des jeux — alterné, aléatoire ou choisi manche par manche —, jeux inclus), un onglet par jeu (niveaux autorisés et réglages propres au jeu) et *Serveur*. Les autres joueurs voient les mêmes réglages en lecture seule. Le pseudo, le personnage et les graphismes se changent dans le menu principal.
+
+![Réglages de la partie : onglets Partie, Parcours délirant, Abri & mortier et Serveur](docs/captures/lobby-reglages.jpg)
+
+Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (onglet Serveur au lobby, bouton « Réglages du serveur » en bas à droite pendant une manche). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
 
 Quitter le jeu ou « Fermer le serveur » arrête la partie pour tout le monde (les autres reviennent au menu avec un message).
 
@@ -66,11 +77,15 @@ Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godo
 | Bouger | Z Q S D (les touches sont lues par position : W A S D sur un clavier QWERTY) | Stick gauche |
 | Sauter | Espace | A |
 | Parcours — utiliser l'objet tenu | E ou clic droit | X |
+| Parcours — revenir au dernier checkpoint | R | LB |
+| Parcours — recommencer au départ | T | Select |
 | Caméra | Souris (clic sur le jeu pour la capturer, Échap pour la libérer) ou flèches | Stick droit |
 | Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
 | Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |
+| Saut cosmique — viser et décoller | Souris (cap et hauteur) · clic droit maintenu : visée précise · Espace : décoller | Stick droit · LT maintenu : visée précise · A : décoller |
+| Saut cosmique — rétro-fusées | Maintenir Espace (la trajectoire tourne vers la direction regardée) | Maintenir A |
 | Menus | Flèches, Entrée, Échap | Croix ou stick gauche, A : valider, B : retour |
-| Lobby — régler la partie | Souris | Start, puis croix pour choisir, A pour valider, gauche / droite pour les nombres, B ou Start pour revenir au terrain |
+| Lobby — régler la partie | Souris (Échap ferme la fenêtre des réglages) | Start, puis croix pour choisir, A pour valider, LB / RB pour changer d'onglet, B ou Start pour fermer la fenêtre puis revenir au terrain |
 
 Les boutons de la manette se changent dans **Options → Configurer la manette** (avec la vitesse de la caméra au stick et l'inversion de l'axe vertical).
 

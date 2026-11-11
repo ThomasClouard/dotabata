@@ -3,5 +3,6 @@
 import type { GameMeta } from '../shared/src/game-api';
 import { parkourMeta } from './parkour/shared';
 import { mortarMeta } from './mortar/shared';
+import { spaceMeta } from './space/shared';
 
-export const gameMetas: GameMeta[] = [parkourMeta, mortarMeta];
+export const gameMetas: GameMeta[] = [parkourMeta, mortarMeta, spaceMeta];

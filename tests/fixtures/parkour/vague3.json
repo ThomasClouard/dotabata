@@ -1,0 +1,25 @@
+{
+  "title": "Banc d'essai vague 3",
+  "difficulty": 3,
+  "elements": [
+    { "id": "depart", "type": "start", "pos": [0, -0.5, 0], "size": [10, 1, 10] },
+    { "type": "coin", "pos": [2, 0.9, 3], "size": [0.8, 0.8, 0.8] },
+    { "type": "platform", "pos": [0, -0.5, 12], "size": [8, 1, 14] },
+    { "id": "bouton", "type": "button", "pos": [-2.5, -0.05, 9], "size": [1.6, 0.2, 1.6], "link": "porte1", "duration": 8 },
+    { "id": "porte", "type": "door", "pos": [0, 1.5, 16], "size": [8, 3, 0.5], "link": "porte1" },
+    { "type": "platform", "pos": [0, -0.5, 24], "size": [6, 1, 6] },
+    { "id": "boite1", "type": "itembox", "pos": [0, 1.2, 24], "size": [1, 1, 1], "respawn": 4 },
+    { "type": "checkpoint", "pos": [0, -0.5, 32], "size": [6, 1, 6] },
+    { "id": "memoire", "type": "memory", "pos": [0, -0.5, 41], "size": [6, 1, 12], "cols": 3, "rows": 4, "gap": 0.25, "traps": 0.6 },
+    { "type": "platform", "pos": [0, -0.5, 51], "size": [6, 1, 8] },
+    { "id": "trappe", "type": "trapdoor", "pos": [0, -0.5, 59], "size": [4, 1, 4], "link": "trappe" },
+    { "type": "platform", "pos": [0, -0.5, 65], "size": [6, 1, 6] },
+    { "id": "levier", "type": "lever", "pos": [2.2, 1, 52], "size": [1.2, 2, 1.2], "link": "trappe", "duration": 3, "cooldown": 8 },
+    { "type": "checkpoint", "pos": [0, -0.5, 72], "size": [6, 1, 6] },
+    { "type": "hazard", "style": "lava", "pos": [0, -4, 50], "size": [12, 1, 40] },
+    { "type": "coin", "pos": [0, 0.9, 65], "size": [0.8, 0.8, 0.8] },
+    { "type": "coin", "pos": [-1.5, 0.9, 72], "size": [0.8, 0.8, 0.8] },
+    { "id": "boite2", "type": "itembox", "pos": [1, 1.2, 72], "size": [1, 1, 1] },
+    { "type": "finish", "pos": [0, -0.5, 80], "size": [8, 1, 6] }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Banc d'essai vague 2",
+  "difficulty": 3,
+  "elements": [
+    { "id": "depart", "type": "start", "pos": [0, -0.5, 0], "size": [10, 1, 10] },
+    { "id": "boue", "type": "mud", "pos": [0, -0.5, 9], "size": [6, 1, 8] },
+    { "type": "platform", "pos": [0, -0.5, 17], "size": [6, 1, 8] },
+    { "id": "gelatine", "type": "jelly", "pos": [0, -0.5, 26], "size": [5, 1, 6] },
+    { "type": "platform", "pos": [0, 0.5, 32], "size": [6, 1, 6] },
+    { "id": "rampe", "type": "ramp", "pos": [0, 1.5, 38], "size": [5, 1, 6], "rise": 2 },
+    { "type": "checkpoint", "pos": [0, 2.5, 44], "size": [6, 1, 6] },
+    { "id": "speedpad", "type": "boost", "pos": [0, 2.5, 49], "size": [4, 1, 4], "dir": [0, 1], "speed": 18 },
+    { "type": "platform", "pos": [0, 2.5, 63], "size": [6, 1, 10] },
+    { "id": "canon", "type": "launcher", "pos": [0, 4, 66], "size": [2.5, 2, 2.5], "to": [0, 3, 81], "apex": 3 },
+    { "type": "checkpoint", "pos": [0, 2.5, 81], "size": [6, 1, 6] },
+    { "id": "tremplin", "type": "jumppad", "pos": [0, 2.5, 85], "size": [2, 1, 2], "launch": [0, 12, 7] },
+    { "type": "platform", "pos": [0, 4.5, 92], "size": [5, 1, 6] },
+    { "id": "tyrolienne", "type": "zipline", "pos": [0, 7, 94], "size": [0.4, 3, 0.4], "to": [0, 4.5, 111], "speed": 10 },
+    { "type": "checkpoint", "pos": [0, 0.5, 115], "size": [6, 1, 8] },
+    { "id": "tuyau", "type": "teleport", "pos": [0, 2, 118], "size": [2, 2, 1.5], "to": [0, 1.2, 132], "exitVel": [0, 0, 2] },
+    { "type": "platform", "pos": [0, 0.5, 132], "size": [6, 1, 6] },
+    { "id": "bulles", "type": "bubble", "pos": [0, 0.6, 138.5], "size": [2, 0.4, 2], "count": 3, "rise": 7, "period": 7 },
+    { "type": "checkpoint", "pos": [0, 5.5, 143], "size": [5, 1, 5] },
+    { "id": "lune", "type": "lowgrav", "pos": [0, 9, 152], "size": [8, 12, 22], "gravity": 0.35 },
+    { "type": "platform", "pos": [0, 8.5, 150], "size": [4, 1, 4] },
+    { "type": "platform", "pos": [0, 8.5, 160], "size": [4, 1, 4] },
+    { "type": "platform", "pos": [0, 8.5, 167.5], "size": [4, 1, 7] },
+    { "type": "platform", "pos": [0, 8.5, 175.75], "size": [4, 1, 4.5] },
+    { "id": "rafales", "type": "wind", "pos": [0, 10, 171], "size": [8, 4, 14], "force": [24, 0, 0], "period": 3 },
+    { "id": "toboggan", "type": "ramp", "pos": [0, 6, 183], "size": [4, 1, 10], "rise": -5, "slide": true },
+    { "type": "finish", "pos": [0, 3.5, 191], "size": [8, 1, 6] }
+  ]
+}

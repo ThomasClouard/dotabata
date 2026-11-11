@@ -1,0 +1,10 @@
+{
+  "rounds": 5,
+  "order": "alternate",
+  "games": ["parkour", "mortar"],
+  "list": [],
+  "game": {
+    "parkour": { "duration": 150, "hurry": 40, "levels": [] },
+    "mortar": { "buildTime": 20, "battleTime": 120, "budget": 14, "hp": 100, "crates": true, "shrink": 35 }
+  }
+}

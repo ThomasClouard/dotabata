@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "jeux-niveaux": {
+      "command": "node",
+      "args": ["--import", "tsx", "mcp/src/index.ts"]
+    }
+  }
+}

@@ -54,6 +54,19 @@
     #corner { position: fixed; left: 12px; bottom: 10px; font-size: 12px; color: #fff; text-shadow: 1px 1px 0 var(--ink); pointer-events: none; }
     #stop { position: fixed; right: 12px; bottom: 12px; display: none; }
     #wait { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
+    /* écran de chargement : Dotabata! + ドタバタ dessiné en traits (pas de police japonaise requise) */
+    #splash { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(160deg, #ff8fab 0%, #c77dff 55%, #4361ee 100%); transition: opacity 0.5s, transform 0.5s; text-align: center; }
+    #splash.out { opacity: 0; transform: scale(1.08); pointer-events: none; }
+    #splash .logo { font-size: clamp(54px, 13vw, 120px); font-weight: 900; color: #ffd60a; letter-spacing: 2px; text-shadow: 5px 5px 0 var(--ink), -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink); line-height: 1; }
+    #splash .logo span { display: inline-block; animation: hop 0.9s ease-in-out infinite; }
+    #splash svg { width: min(78vw, 420px); height: auto; overflow: visible; }
+    #splash .kana { animation: hop 0.9s ease-in-out infinite; }
+    #splash .ink { fill: none; stroke: var(--ink); stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; }
+    #splash .fill { fill: none; stroke: #fff; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+    #splash .sub { font-size: 18px; font-weight: bold; color: #fff; text-shadow: 2px 2px 0 var(--ink); padding: 0 16px; }
+    #splash .load { font-size: 14px; color: #fff; opacity: 0.85; text-shadow: 1px 1px 0 var(--ink); animation: blink 1.2s ease-in-out infinite; }
+    @keyframes hop { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-14px) rotate(-4deg); } 60% { transform: translateY(2px) rotate(3deg); } }
+    @keyframes blink { 50% { opacity: 0.35; } }
   </style>
 </head>
 <body>
@@ -66,6 +79,12 @@
   <div id="wait"><div class="card">Partie en cours… tu rejoins à la prochaine manche !</div></div>
   <div id="corner"></div>
   <button id="stop" class="small">⏹ Arrêter la partie</button>
+  <div id="splash">
+    <div class="logo"><span style="animation-delay:0.00s">D</span><span style="animation-delay:0.07s">o</span><span style="animation-delay:0.14s">t</span><span style="animation-delay:0.21s">a</span><span style="animation-delay:0.28s">b</span><span style="animation-delay:0.35s">a</span><span style="animation-delay:0.42s">t</span><span style="animation-delay:0.49s">a</span><span style="animation-delay:0.56s">!</span></div>
+    <svg viewBox="-12 -12 454 124" role="img" aria-label="ドタバタ"><g transform="translate(0 0)"><g class="kana" style="animation-delay:0s"><path class="ink" d="M40 8 L40 95 M42 44 L76 64 M74 6 L82 22 M88 2 L96 18"/><path class="fill" d="M40 8 L40 95 M42 44 L76 64 M74 6 L82 22 M88 2 L96 18"/></g></g><g transform="translate(110 0)"><g class="kana" style="animation-delay:0.12s"><path class="ink" d="M46 6 L20 44 M34 26 L80 26 Q74 66 32 96 M34 50 L66 68"/><path class="fill" d="M46 6 L20 44 M34 26 L80 26 Q74 66 32 96 M34 50 L66 68"/></g></g><g transform="translate(220 0)"><g class="kana" style="animation-delay:0.24s"><path class="ink" d="M36 28 L10 82 M60 28 Q78 52 92 82 M74 6 L82 22 M88 2 L96 18"/><path class="fill" d="M36 28 L10 82 M60 28 Q78 52 92 82 M74 6 L82 22 M88 2 L96 18"/></g></g><g transform="translate(330 0)"><g class="kana" style="animation-delay:0.36s"><path class="ink" d="M46 6 L20 44 M34 26 L80 26 Q74 66 32 96 M34 50 L66 68"/><path class="fill" d="M46 6 L20 44 M34 26 L80 26 Q74 66 32 96 M34 50 L66 68"/></g></g></svg>
+    <div class="sub">« do-ta-ba-ta » : le joyeux chahut, en japonais</div>
+    <div class="load">Chargement…</div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

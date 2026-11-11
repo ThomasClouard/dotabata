@@ -12,6 +12,7 @@ signal to_lobby_pressed
 signal quality_toggled
 signal connect_requested(address: String)
 
+var splash: Control  # écran de chargement (libéré une fois effacé)
 var root := Control.new()
 var hud := Control.new()
 var lobby := PanelContainer.new()
@@ -118,6 +119,16 @@ func _ready() -> void:
 	overlay.visible = false
 	root.add_child(overlay)
 
+	# écran de chargement, par-dessus tout le reste
+	splash = preload("res://ui/splash.gd").new()
+	root.add_child(splash)
+
+
+## Efface l'écran de chargement (dès qu'on a une réponse du serveur ou qu'il faut une saisie).
+func dismiss_splash() -> void:
+	if is_instance_valid(splash):
+		splash.dismiss()
+
 
 # ---------- HUD des mini-jeux ----------
 
@@ -208,6 +219,7 @@ func hide_overlay() -> void:
 
 
 func show_connect(address: String, error := "", busy := false) -> void:
+	dismiss_splash()  # après sa durée minimale : l'écran de connexion reste visible si le serveur tarde
 	var edit := LineEdit.new()
 	edit.text = address
 	edit.placeholder_text = "adresse:port, par exemple 192.168.1.20:3000"
@@ -226,6 +238,7 @@ func show_connect(address: String, error := "", busy := false) -> void:
 
 
 func show_message(title: String, text: String, button := "", action: Callable = Callable()) -> void:
+	dismiss_splash()
 	var t := UI.label(text, 15)
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var kids: Array = [UI.h1(title), t]

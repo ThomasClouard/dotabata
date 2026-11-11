@@ -193,8 +193,18 @@ function updateChrome() {
 }
 stopBtn.onclick = () => net.send({ t: 'stop' });
 
+// ---------- écran de chargement ----------
+// Reste au moins 1,6 s après l'ouverture de la page, puis s'efface dès qu'on a le lobby (ou une erreur).
+function hideSplash() {
+  const sp = document.getElementById('splash');
+  if (!sp || sp.dataset.out) return;
+  sp.dataset.out = '1';
+  setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 600); }, Math.max(0, 1600 - performance.now()));
+}
+
 // ---------- réseau ----------
 net.onClose = () => {
+  hideSplash();
   overlay.style.display = 'flex';
   overlay.firstElementChild!.innerHTML = '<h1>Connexion perdue</h1><p>Le serveur ne répond plus. Recharge la page pour te reconnecter.</p>';
 };
@@ -205,6 +215,7 @@ net.onMessage = (m) => {
       ctx.myId = m.id;
       break;
     case 'lobby': {
+      hideSplash();
       lobby = m;
       syncPlayers(m.players);
       if (m.phase === 'lobby') {

@@ -307,6 +307,7 @@ func _meta(game_id: String) -> Dictionary:
 # ---------- réseau ----------
 
 func _on_message(m: Dictionary) -> void:
+	ui.dismiss_splash()
 	match m["t"]:
 		"welcome":
 			my_id = m["id"]

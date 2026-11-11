@@ -83,13 +83,12 @@ func _ready() -> void:
 	net.message.connect(_on_message)
 	net.opened.connect(func() -> void: ui.hide_overlay())
 	net.closed.connect(_on_closed)
-	ui.profile_changed.connect(_on_profile)
 	ui.settings_changed.connect(func(s: Dictionary) -> void: net.send({"t": "settings", "settings": s}))
 	ui.bots_changed.connect(func(n: int) -> void: net.send({"t": "bots", "n": n}))
+	ui.bot_removed.connect(func(id: String) -> void: net.send({"t": "bots", "remove": id}))
 	ui.start_pressed.connect(func() -> void: net.send({"t": "start"}))
 	ui.stop_pressed.connect(func() -> void: net.send({"t": "stop"}))
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
-	ui.quality_toggled.connect(_toggle_quality)
 	var menu := ui.menu
 	menu.can_host = Discovery.supported()
 	menu.join_requested.connect(_join)
@@ -121,6 +120,7 @@ func _ready() -> void:
 		input.set_process_unhandled_input(not on)  # la manette règle le panneau au lieu de faire courir le personnage
 		if on:
 			input.release_mouse()
+		_update_chrome()
 		if _lobby != null and _phase == "lobby":
 			ui.render_lobby(_lobby, my_id))
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool) -> void:
@@ -352,24 +352,11 @@ func _reset_session() -> void:
 	_bots_applied = false
 	_autostarted = false
 	ui.exit_pad_nav()
+	ui.close_game_settings()
 	ui.lobby.visible = false
 	ui.wait.visible = false
 	ui.stop.visible = false
 	ui.hide_banner()
-
-
-func _on_profile(p: Dictionary) -> void:
-	Config.profile = p
-	Config.save()
-	net.send({"t": "profile", "name": p["name"], "color": p["color"], "hat": p["hat"]})
-
-
-func _toggle_quality() -> void:
-	Config.quality = (Config.quality + 1) % 3
-	Config.save()
-	env.apply_quality(Config.quality)
-	if _lobby != null and _phase == "lobby":
-		ui.render_lobby(_lobby, my_id)
 
 
 # ---------- joueurs ----------
@@ -487,7 +474,16 @@ func _update_chrome() -> void:
 	var hint := "Z Q S D : bouger · Espace : sauter · Souris : caméra · Échap : libérer la souris"
 	if Pad.device() >= 0:
 		hint = "Stick gauche : bouger · %s : sauter · Stick droit : caméra · %s : utiliser" % [Pad.label(Pad.bindings["sauter"]), Pad.label(Pad.bindings["utiliser"])]
-	ui.corner.text = "" if _phase == "lobby" or _phase == "boot" or _phase == "menu" else hint
+	if _phase == "lobby" and not _waiting:
+		# aide du lobby, en bas à gauche sous le panneau
+		hint = "Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le terrain pour la capturer, Échap pour la libérer)"
+		if Pad.device() >= 0:
+			var start := Pad.label(Pad.bindings.get("panneau", JOY_BUTTON_START))
+			if ui.pad_nav:
+				hint = "Manette : croix pour choisir, %s pour valider, %s ou %s pour retourner sur le terrain" % [Pad.label(Pad.bindings["valider"]), Pad.label(Pad.bindings["retour"]), start]
+			else:
+				hint = "Stick gauche : bouger · %s : sauter · %s : panneau du lobby" % [Pad.label(Pad.bindings["sauter"]), start]
+	ui.corner.text = "" if _phase == "boot" or _phase == "menu" else hint
 
 
 func _meta(game_id: String) -> Dictionary:

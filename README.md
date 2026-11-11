@@ -49,9 +49,13 @@ Tout se pilote à la souris, au clavier (flèches, Entrée, Échap pour revenir)
 
 ### Le lobby
 
-![Lobby : le panneau de réglages de la partie à gauche, les joueurs et les bots qui gambadent sur le terrain](docs/captures/lobby.jpg)
+![Lobby : à gauche les places de la partie (joueurs, bots, places libres) et le résumé des réglages ; les joueurs gambadent sur le terrain](docs/captures/lobby.jpg)
 
-Celui qui crée la partie en est l'hôte (« · hôte » dans le lobby) : il règle la partie dans le lobby et la lance. Tout est paramétrable : nombre de manches, ordre des jeux (alterné, aléatoire ou liste choisie), jeux inclus, niveaux autorisés et réglages propres à chaque jeu. Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (bouton « Réglages du serveur » en bas à droite). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
+Le panneau du lobby montre une case par place : les joueurs (l'hôte, toi, les bots), puis les places libres. Celui qui crée la partie en est l'hôte : il ajoute un bot dans la première place libre ou retire un bot précis (croix sur sa carte), et lance la partie. En dessous, un résumé de la partie (manches, ordre, jeux) et le bouton **Réglages de la partie…**, qui ouvre une fenêtre à onglets : *Partie* (nombre de manches, ordre des jeux — alterné, aléatoire ou choisi manche par manche —, jeux inclus), un onglet par jeu (niveaux autorisés et réglages propres au jeu) et *Serveur*. Les autres joueurs voient les mêmes réglages en lecture seule. Le pseudo, le personnage et les graphismes se changent dans le menu principal.
+
+![Réglages de la partie : onglets Partie, Parcours délirant, Abri & mortier et Serveur](docs/captures/lobby-reglages.jpg)
+
+Les **réglages du serveur** (nom, joueurs max, mot de passe) se changent à tout moment, même avec des joueurs connectés et en pleine manche (onglet Serveur au lobby, bouton « Réglages du serveur » en bas à droite pendant une manche). Baisser le maximum n'expulse personne : ça ferme seulement la porte aux nouveaux.
 
 Quitter le jeu ou « Fermer le serveur » arrête la partie pour tout le monde (les autres reviennent au menu avec un message).
 
@@ -70,7 +74,7 @@ Les valeurs de départ des réglages sont dans [godot/config/defaults.json](godo
 | Mortier — construire | Clic gauche ou F : poser · clic droit ou R : retirer · 1 2 3 : matériau | RT : poser · LT : retirer · Y : matériau suivant |
 | Mortier — tirer | Maintenir le clic gauche (ou F) pour charger, relâcher pour tirer | Maintenir RT, relâcher pour tirer |
 | Menus | Flèches, Entrée, Échap | Croix ou stick gauche, A : valider, B : retour |
-| Lobby — régler la partie | Souris | Start, puis croix pour choisir, A pour valider, gauche / droite pour les nombres, B ou Start pour revenir au terrain |
+| Lobby — régler la partie | Souris (Échap ferme la fenêtre des réglages) | Start, puis croix pour choisir, A pour valider, LB / RB pour changer d'onglet, B ou Start pour fermer la fenêtre puis revenir au terrain |
 
 Les boutons de la manette se changent dans **Options → Configurer la manette** (avec la vitesse de la caméra au stick et l'inversion de l'axe vertical).
 

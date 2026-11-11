@@ -3,13 +3,13 @@ extends CanvasLayer
 ## Interface par-dessus le jeu : accueil (liste des serveurs, création), panneau du lobby (formulaire généré depuis les réglages
 ## déclarés par chaque jeu), bandeau de manche, toasts, scores, podium. Portage de client/src/ui.ts.
 
-signal profile_changed(p: Dictionary)
 signal settings_changed(s: Dictionary)
 signal bots_changed(n: int)
+## Hôte : retirer ce bot du lobby.
+signal bot_removed(id: String)
 signal start_pressed
 signal stop_pressed
 signal to_lobby_pressed
-signal quality_toggled
 ## Accueil : rejoindre un serveur (mot de passe "" si aucun), en créer un ; quitter / fermer le serveur.
 signal leave_pressed
 ## Hôte : réglages du serveur modifiés ({name, max, password}).
@@ -30,7 +30,9 @@ var server_btn: Button
 var corner: Label
 
 var _lobby_box := VBoxContainer.new()
-var _lobby_scroll := ScrollContainer.new()
+var _lobby_m: Dictionary = {}  # dernier état du lobby reçu
+var _lobby_me := ""
+var _tab := ""  # onglet ouvert de la fenêtre des réglages de la partie ("" : fermée)
 var _overlay_card := PanelContainer.new()
 var _banner := VBoxContainer.new()
 var _b_title: Label
@@ -38,8 +40,6 @@ var _b_sub: Label
 var _b_count: Label
 var _toast: Label
 var _toast_tween: Tween
-var _pending: Variant = null
-var _pending_id := ""
 var _waiting_focus := false
 var pad_nav := false  # la manette navigue dans le panneau du lobby (au lieu de faire courir le personnage)
 var _server_form: Dictionary = {}  # réglages du serveur connus de l'hôte (vide = on n'héberge pas)
@@ -86,18 +86,13 @@ func _ready() -> void:
 	corner.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(corner)
 
-	# panneau du lobby, à gauche
-	lobby.anchor_bottom = 1.0
-	lobby.offset_left = 14
-	lobby.offset_top = 14
-	lobby.offset_bottom = -22
-	lobby.offset_right = 14 + 380
-	_lobby_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_lobby_scroll.follow_focus = true  # navigation à la manette
+	# panneau du lobby, en haut à gauche : sa hauteur suit le contenu (fixe pour un nombre de places donné)
+	lobby.offset_left = 18
+	lobby.offset_top = 18
+	lobby.offset_right = 18 + 400
 	_lobby_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lobby_box.add_theme_constant_override("separation", 6)
-	_lobby_scroll.add_child(_lobby_box)
-	lobby.add_child(_lobby_scroll)
+	_lobby_box.add_theme_constant_override("separation", 8)
+	lobby.add_child(_lobby_box)
 	lobby.visible = false
 	root.add_child(lobby)
 
@@ -222,7 +217,9 @@ func toast(text: String, seconds := 1.8) -> void:
 
 # ---------- voile central ----------
 
-func _fill_overlay(children: Array) -> void:
+func _fill_overlay(children: Array, width := 440.0) -> void:
+	_tab = ""  # la carte centrale ne montre plus les réglages de la partie
+	_overlay_card.custom_minimum_size.x = width
 	for c in _overlay_card.get_children():
 		_overlay_card.remove_child(c)
 		c.queue_free()
@@ -235,6 +232,7 @@ func _fill_overlay(children: Array) -> void:
 
 
 func hide_overlay() -> void:
+	_tab = ""
 	overlay.visible = false
 
 
@@ -409,30 +407,30 @@ func show_podium(totals: Dictionary, players: Array, my_id: String, host: bool) 
 
 func _focused_field() -> Control:
 	var f := get_viewport().gui_get_focus_owner()
-	if f is LineEdit and lobby.is_ancestor_of(f):
+	if f is LineEdit and (lobby.is_ancestor_of(f) or overlay.is_ancestor_of(f)):
 		return f
 	return null
 
 
 func render_lobby(m: Dictionary, my_id: String) -> void:
-	# ne pas reconstruire le panneau pendant que l'utilisateur tape dans un champ
+	_lobby_m = m
+	_lobby_me = my_id
+	# ne pas reconstruire pendant que l'utilisateur tape dans un champ (nom du serveur, mot de passe)
 	var f := _focused_field()
 	if f:
-		_pending = m
-		_pending_id = my_id
 		if not _waiting_focus:
 			_waiting_focus = true
 			f.focus_exited.connect(_flush_pending, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
 		return
-	_build_lobby(m, my_id)
+	_build_lobby()
+	if _tab != "":
+		_build_settings()
 
 
 func _flush_pending() -> void:
 	_waiting_focus = false
-	if _pending != null:
-		var m: Dictionary = _pending
-		_pending = null
-		render_lobby(m, _pending_id)
+	if not _lobby_m.is_empty():
+		render_lobby(_lobby_m, _lobby_me)
 
 
 static func _num(value: float, mn: float, mx: float, step: float, host: bool, on_set: Callable) -> SpinBox:
@@ -459,7 +457,107 @@ func _check(text: String, on: bool, host: bool, on_toggle: Callable) -> CheckBox
 	return cb
 
 
-func _build_lobby(m: Dictionary, my_id: String) -> void:
+## Valeur réglable « − valeur + » (les boutons disparaissent en lecture seule).
+static func _stepper(value: float, mn: float, mx: float, step: float, unit: String, host: bool, on_set: Callable) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 6)
+	var cur := [value]
+	var fmt := func(v: float) -> String:
+		var t := str(int(round(v))) if is_equal_approx(step, round(step)) else "%.1f" % v
+		return t + (" " + unit if unit != "" else "")
+	var l := UI.label(fmt.call(value), 17)
+	l.custom_minimum_size.x = 70
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var change := func(dir: float) -> void:
+		var v := clampf(cur[0] + dir * step, mn, mx)
+		if not is_equal_approx(v, cur[0]):
+			cur[0] = v
+			l.text = fmt.call(v)
+			on_set.call(v)
+	var minus := UI.button("−", "small", func() -> void: change.call(-1.0))
+	var plus := UI.button("+", "small", func() -> void: change.call(1.0))
+	for b: Button in [minus, plus]:
+		b.custom_minimum_size.x = 34
+		b.visible = host
+	h.add_child(minus)
+	h.add_child(l)
+	h.add_child(plus)
+	return h
+
+
+## Interrupteur Oui / Non.
+static func _toggle(on: bool, host: bool, on_set: Callable) -> Button:
+	var b := UI.button("Oui" if on else "Non", "small", func() -> void: on_set.call(not on))
+	b.custom_minimum_size.x = 74
+	b.disabled = not host
+	var bg := Color("#70e000") if on else Color("#e6e3ee")
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		var s: StyleBoxFlat = b.get_theme_stylebox(st).duplicate()
+		s.bg_color = bg.lightened(0.15) if st == "hover" else bg
+		b.add_theme_stylebox_override(st, s)
+	for c in ["font_color", "font_disabled_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(c, UI.INK if on else UI.MUTED)
+	return b
+
+
+## Petite étiquette arrondie (jeux du résumé, « privée »).
+static func _pill(text: String, bg: Color, fg := UI.INK) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UI.sbox(bg, 10, 10, 3))
+	p.add_child(UI.label(text, 13, fg))
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return p
+
+
+## Case de la grille des joueurs (même taille pour un joueur, un bot ou une place libre).
+static func _slot(bg: Color, border := Color(0, 0, 0, 0)) -> PanelContainer:
+	var c := PanelContainer.new()
+	var s := UI.sbox(bg, 12, 10, 6)
+	if border.a > 0.0:
+		s.border_color = border
+		s.set_border_width_all(2)
+	c.add_theme_stylebox_override("panel", s)
+	c.custom_minimum_size = Vector2(0, 42)
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return c
+
+
+func _player_card(p: Dictionary, host_id: String, my_id: String, host: bool) -> Control:
+	var col := Gfx.col(int(p["color"]))
+	var mine: bool = p["id"] == my_id
+	var c := _slot(Color.WHITE.lerp(col, 0.22), UI.ACCENT2 if mine else Color(0, 0, 0, 0))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 7)
+	h.add_child(UI.dot(col, 16))
+	var n := UI.label(str(p["name"]), 15)
+	n.clip_text = true
+	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	n.custom_minimum_size.x = 40
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	h.add_child(n)
+	var tag := "hôte" if p["id"] == host_id else ("bot" if p["isBot"] else ("toi" if mine else ""))
+	if tag != "":
+		var t := UI.label(tag, 12, UI.ACCENT if tag == "hôte" else UI.MUTED)
+		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(t)
+	if host and p["isBot"]:
+		var x := UI.button("×", "small", func() -> void: bot_removed.emit(p["id"]))
+		x.tooltip_text = "Retirer ce bot"
+		for st in ["normal", "hover", "pressed"]:
+			var xs := UI.sbox(Color(1, 1, 1, 0.9 if st == "hover" else 0.55), 9, 7, 0)
+			x.add_theme_stylebox_override(st, xs)
+		x.add_theme_color_override("font_color", UI.MUTED)
+		x.add_theme_color_override("font_hover_color", UI.ACCENT)
+		x.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(x)
+	c.add_child(h)
+	return c
+
+
+func _build_lobby() -> void:
+	var m := _lobby_m
+	var my_id := _lobby_me
 	var me: Variant = null
 	for p: Dictionary in m["players"]:
 		if p["id"] == my_id:
@@ -467,202 +565,333 @@ func _build_lobby(m: Dictionary, my_id: String) -> void:
 	if me == null:
 		return
 	var host: bool = m["hostId"] == my_id
-	var s: Dictionary = m["settings"].duplicate(true)
-	var push := func() -> void: settings_changed.emit(s)
-	var scroll := _lobby_scroll.scroll_vertical
-	var keep_focus := _focus_path()
+	var s: Dictionary = m["settings"]
+	var srv: Dictionary = m.get("server", {})
+	var keep_focus := _focus_path(_lobby_box)
 	for c in _lobby_box.get_children():
 		_lobby_box.remove_child(c)
 		c.queue_free()
 	var box := _lobby_box
-	var my_color := int(me["color"])
-	var my_hat: String = me["hat"]
-	var my_name: String = me["name"]
 
-	var srv: Dictionary = m.get("server", {})
-	box.add_child(UI.h1(str(srv.get("name", "Dotabata!"))))
-	var name_edit := LineEdit.new()
-	name_edit.text = my_name
-	name_edit.max_length = 16
-	name_edit.custom_minimum_size.x = 170
-	name_edit.text_submitted.connect(func(_t: String) -> void: name_edit.release_focus())
-	name_edit.focus_exited.connect(func() -> void:
-		if name_edit.text != my_name:
-			profile_changed.emit({"name": name_edit.text, "color": my_color, "hat": my_hat}))
-	box.add_child(UI.row("Pseudo", [name_edit]))
-
-	var swatches := UI.flow()
-	for c: int in Protocol.COLORS:
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(28, 28)
-		b.tooltip_text = "Couleur"
-		for st in ["normal", "hover", "pressed"]:
-			var sb := UI.sbox(Gfx.col(c), 14, 0, 0)
-			sb.border_color = UI.INK if c == my_color else Color.WHITE
-			sb.set_border_width_all(3)
-			b.add_theme_stylebox_override(st, sb)
-		b.pressed.connect(func() -> void: profile_changed.emit({"name": my_name, "color": c, "hat": my_hat}))
-		swatches.add_child(b)
-	box.add_child(swatches)
-
-	var hats := UI.flow()
-	for hat: String in Protocol.HATS:
-		var b := UI.button(hat, "small", func() -> void: profile_changed.emit({"name": my_name, "color": Protocol.HAT_COLOR[hat], "hat": hat}))
-		b.tooltip_text = "Personnage"
-		if not host and hat == my_hat:
-			b.set_meta("pad_first", true)
-		if hat == my_hat:
-			UI.mark_selected(b)
-		hats.add_child(b)
-	box.add_child(hats)
-
+	# en-tête : nom de la partie, places, adresse pour l'hôte
+	var title := UI.h1(str(srv.get("name", "Dotabata!")))
+	title.add_theme_font_size_override("font_size", 28)
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	box.add_child(title)
 	var players: Array = m["players"]
-	var humans := players.filter(func(p: Dictionary) -> bool: return not p["isBot"]).size()
-	box.add_child(UI.h2("Joueurs (%d/%d)" % [humans, int(srv.get("max", Protocol.MAX_PLAYERS))]))
+	var slots := maxi(int(srv.get("max", Protocol.MAX_PLAYERS)), players.size())
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	var count := UI.h2("Joueurs  %d / %d" % [players.size(), slots])
+	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(count)
+	if srv.get("locked", false):
+		head.add_child(_pill("Privée", Color("#ffe3ea"), UI.ACCENT))
+	box.add_child(head)
+
+	# grille des places : une case par place, la hauteur ne change pas quand on ajoute des bots
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
 	var bots := 0
 	for p: Dictionary in players:
-		var tags := ""
-		if p["id"] == m["hostId"]:
-			tags += "  · hôte"
 		if p["isBot"]:
-			tags += "  · bot"
 			bots += 1
-		if p["id"] == my_id:
-			tags += "  (toi)"
-		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", 8)
-		line.add_child(UI.dot(Gfx.col(int(p["color"]))))
-		line.add_child(UI.label(str(p["name"]) + tags, 15))
-		box.add_child(line)
-	if host:
-		box.add_child(UI.row("Bots pour compléter", [
-			UI.button("−", "small", func() -> void: bots_changed.emit(bots - 1)),
-			UI.label(str(bots), 15),
-			UI.button("+", "small", func() -> void: bots_changed.emit(bots + 1))]))
+		grid.add_child(_player_card(p, m["hostId"], my_id, host))
+	for i in range(players.size(), slots):
+		if host and i == players.size():
+			var add := UI.button("+  Ajouter un bot", "", func() -> void: bots_changed.emit(bots + 1))
+			add.custom_minimum_size = Vector2(0, 42)
+			add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			add.add_theme_font_size_override("font_size", 14)
+			grid.add_child(add)
+		else:
+			var free := _slot(Color(1, 1, 1, 0.35), Color("#ddd6ee"))
+			var l := UI.label("Place libre", 13, Color("#b3abc9"))
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			free.add_child(l)
+			grid.add_child(free)
+	box.add_child(grid)
 
-	if host and not _server_form.is_empty():
-		box.add_child(UI.h2("Serveur"))
-		for c: Control in server_fields(_server_form, _on_server_form):
-			box.add_child(c)
-	elif srv.get("locked", false):
-		box.add_child(UI.small("Serveur protégé par un mot de passe."))
-
-	box.add_child(UI.h2("Réglages de la partie" if host else "Réglages (choisis par l'hôte)"))
-	box.add_child(UI.row("Nombre de manches", [_num(s["rounds"], 1, 15, 1, host, func(v: float) -> void:
-		s["rounds"] = int(v)
-		push.call())]))
-	var order := OptionButton.new()
-	order.focus_mode = Control.FOCUS_NONE
-	var order_keys := ["alternate", "random", "list"]
-	for label: String in ["Alterné", "Aléatoire", "Liste choisie"]:
-		order.add_item(label)
-	order.selected = maxi(0, order_keys.find(s["order"]))
-	order.disabled = not host
-	order.item_selected.connect(func(i: int) -> void:
-		s["order"] = order_keys[i]
-		push.call())
-	box.add_child(UI.row("Ordre des jeux", [order]))
-
-	var metas: Array = m["metas"]
-	var games: Array = s["games"]
-	var inc := UI.flow()
-	for g: Dictionary in metas:
-		inc.add_child(_check(g["name"], games.has(g["id"]), host, func(on: bool) -> void:
-			var next := []
-			for x: Dictionary in metas:
-				if (on if x["id"] == g["id"] else games.has(x["id"])):
-					next.append(x["id"])
-			s["games"] = next
-			push.call()))
-	box.add_child(UI.label("Jeux inclus", 14))
-	box.add_child(inc)
+	# résumé de la partie
+	box.add_child(_gap(4))
+	box.add_child(UI.h2("La partie"))
+	var rounds := int(s["rounds"])
+	var order_txt: String = {"alternate": "jeux en alternance", "random": "jeux au hasard", "list": "ordre choisi"}.get(s["order"], "")
+	box.add_child(UI.label("%d manche%s · %s" % [rounds, "s" if rounds > 1 else "", order_txt], 16))
+	var names := {}
+	for g: Dictionary in m["metas"]:
+		names[g["id"]] = g["name"]
+	var pills := UI.flow()
 	if s["order"] == "list":
 		var list: Array = s["list"]
-		var chosen := UI.flow()
-		for i in int(s["rounds"]):
-			var sel := OptionButton.new()
-			sel.focus_mode = Control.FOCUS_NONE
-			sel.disabled = not host
-			var current := 0
-			for k in metas.size():
-				sel.add_item("%d. %s" % [i + 1, metas[k]["name"]])
-				if i < list.size() and list[i] == metas[k]["id"]:
-					current = k
-			sel.selected = current
-			sel.item_selected.connect(func(k: int) -> void:
-				while list.size() <= i:
-					list.append(metas[0]["id"])
-				list[i] = metas[k]["id"]
-				push.call())
-			chosen.add_child(sel)
-		box.add_child(chosen)
+		for i in mini(rounds, list.size()):
+			pills.add_child(_pill("%d. %s" % [i + 1, names.get(list[i], list[i])], Color("#e7ecff"), UI.ACCENT2))
+	else:
+		for id: String in s["games"]:
+			pills.add_child(_pill(names.get(id, id), Color("#e7ecff"), UI.ACCENT2))
+	box.add_child(pills)
+	var see := UI.button("Réglages de la partie…" if host else "Voir les réglages", "", func() -> void: open_game_settings())
+	see.set_meta("settings_btn", true)
+	if not host:
+		see.set_meta("pad_first", true)
+	box.add_child(see)
 
-	# réglages propres à chaque jeu, générés automatiquement depuis leur schéma
-	var game_vals: Dictionary = s["game"]
-	for g: Dictionary in metas:
-		if not games.has(g["id"]) and s["order"] != "list":
-			continue
-		box.add_child(UI.label(g["name"], 15, UI.ACCENT))
-		if not game_vals.has(g["id"]):
-			game_vals[g["id"]] = {}
-		var vals: Dictionary = game_vals[g["id"]]
-		var defs: Dictionary = g["settings"]
-		for key: String in defs:
-			var def: Dictionary = defs[key]
-			var text: String = def["label"]
-			if def["type"] == "number":
-				if def.get("unit", "") != "":
-					text += " (%s)" % def["unit"]
-				box.add_child(UI.row(text, [_num(vals.get(key, def["default"]), def["min"], def["max"], def.get("step", 1), host, func(v: float) -> void:
-					vals[key] = v
-					push.call())]))
-			elif def["type"] == "bool":
-				box.add_child(UI.row(text, [_check("", bool(vals.get(key, def["default"])), host, func(on: bool) -> void:
-					vals[key] = on
-					push.call())]))
-			else:
-				var options: Array = def["options"]
-				var chosen: Array = vals.get(key, [])
-				var chips := UI.flow()
-				for opt: String in options:
-					chips.add_child(_check(opt, chosen.is_empty() or chosen.has(opt), host, func(on: bool) -> void:
-						var cur: Array = chosen if not chosen.is_empty() else options
-						var next := []
-						for o: String in options:
-							if (on if o == opt else cur.has(o)):
-								next.append(o)
-						vals[key] = [] if next.size() == options.size() else next  # tout coché = pas de restriction
-						push.call()))
-				box.add_child(UI.label(text, 14))
-				box.add_child(chips)
-
+	# lancement
+	box.add_child(_gap(6))
 	if host:
 		var go := UI.button("Lancer la partie", "big", func() -> void: start_pressed.emit())
 		go.set_meta("pad_first", true)
 		box.add_child(go)
 	else:
-		box.add_child(UI.small("En attente du lancement par l'hôte… Entraîne-toi sur le terrain !"))
-	box.add_child(UI.button("Fermer le serveur" if not _server_form.is_empty() else "Quitter le serveur", "small", func() -> void: leave_pressed.emit()))
-	var urls: Array = m["urls"]
-	if not _server_form.is_empty() and not urls.is_empty():
-		var u := UI.small("Les joueurs du réseau local voient ce serveur dans leur liste. Sinon, adresse à saisir : %s" % "  ou  ".join(PackedStringArray(urls)))
-		u.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		box.add_child(u)
-	box.add_child(UI.small("Z Q S D : bouger · Espace : sauter · Souris : caméra (clic sur le jeu pour la capturer, Échap pour la libérer) · Flèches : caméra au clavier"))
-	if Pad.device() >= 0:
-		var start := Pad.label(Pad.bindings.get("panneau", JOY_BUTTON_START))
-		var back := Pad.label(Pad.bindings["retour"])
-		if pad_nav:
-			box.add_child(UI.small("Manette : croix pour choisir, %s pour valider, gauche / droite pour les nombres, %s ou %s pour retourner sur le terrain." % [Pad.label(Pad.bindings["valider"]), back, start]))
-		else:
-			box.add_child(UI.small("Manette : %s pour régler la partie dans ce panneau." % start))
-	box.add_child(UI.row("Graphismes : %s" % Config.QUALITY_NAMES[Config.quality], [
-		UI.button("Passer en %s" % Config.QUALITY_NAMES[(Config.quality + 1) % 3], "small", func() -> void: quality_toggled.emit())]))
-	_lobby_scroll.set_deferred("scroll_vertical", scroll)
-	if pad_nav:  # après le défilement mémorisé, pour que le contrôle choisi reste visible
+		var w := PanelContainer.new()
+		w.add_theme_stylebox_override("panel", UI.sbox(Color("#fff6c2"), 12, 14, 10))
+		var wl := UI.label("En attente du lancement par l'hôte…", 15)
+		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		w.add_child(wl)
+		box.add_child(w)
+	var leave_b := UI.button("Fermer le serveur" if not _server_form.is_empty() else "Quitter la partie", "small", func() -> void: leave_pressed.emit())
+	leave_b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(leave_b)
+	if pad_nav:
 		_pad_focusables(_lobby_box, true)
-		_restore_focus(keep_focus)
+		_restore_focus(_lobby_box, keep_focus)
+
+
+static func _gap(h: float) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size.y = h
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
+
+
+# ---------- fenêtre des réglages de la partie ----------
+
+## Ouvre la fenêtre des réglages (hôte : modifiables ; autres joueurs : lecture seule).
+func open_game_settings(tab := "partie") -> void:
+	if _lobby_m.is_empty():
+		return
+	_tab = tab
+	_build_settings()
+
+
+func close_game_settings() -> void:
+	if _tab == "":
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f and overlay.is_ancestor_of(f):
+		f.release_focus()
+	hide_overlay()
+	if pad_nav:
+		var b := _find_meta(_lobby_box, "settings_btn")
+		if b:
+			b.grab_focus.call_deferred()
+
+
+func _tabs() -> Array:
+	var tabs: Array = [["partie", "Partie"]]
+	for g: Dictionary in _lobby_m["metas"]:
+		tabs.append([g["id"], g["name"]])
+	if _lobby_m["hostId"] == _lobby_me and not _server_form.is_empty():
+		tabs.append(["serveur", "Serveur"])
+	return tabs
+
+
+func _switch_tab(dir: int) -> void:
+	var tabs := _tabs()
+	var i := 0
+	for k in tabs.size():
+		if tabs[k][0] == _tab:
+			i = k
+	_tab = tabs[(i + dir + tabs.size()) % tabs.size()][0]
+	_build_settings()
+	if pad_nav:
+		var b := _find_meta(_overlay_card, "tab_" + _tab)
+		if b:
+			b.grab_focus.call_deferred()
+
+
+func _build_settings() -> void:
+	var m := _lobby_m
+	var host: bool = m["hostId"] == _lobby_me
+	var s: Dictionary = m["settings"].duplicate(true)
+	var push := func() -> void: settings_changed.emit(s)
+	var keep_focus := _focus_path(_overlay_card)
+	var tabs := _tabs()
+	if not tabs.any(func(t: Array) -> bool: return t[0] == _tab):
+		_tab = "partie"
+	var tab := _tab
+
+	var kids: Array = [UI.h1("Réglages de la partie" if host else "Réglages choisis par l'hôte")]
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 6)
+	for t: Array in tabs:
+		var id: String = t[0]
+		var b := UI.button(t[1], "", func() -> void:
+			_tab = id
+			_build_settings())
+		b.set_meta("tab_" + id, true)
+		var on := id == tab
+		for st in ["normal", "hover", "pressed"]:
+			var sb: StyleBoxFlat = b.get_theme_stylebox(st).duplicate()
+			sb.bg_color = UI.ACCENT2 if on else (Color("#e4ddfa") if st == "hover" else Color("#efeaff"))
+			sb.shadow_size = 0
+			sb.content_margin_left = 16
+			sb.content_margin_right = 16
+			sb.content_margin_top = 7
+			sb.content_margin_bottom = 7
+			b.add_theme_stylebox_override(st, sb)
+		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			b.add_theme_color_override(c, Color.WHITE if on else UI.INK)
+		if on:
+			b.set_meta("pad_first", true)
+		bar.add_child(b)
+	kids.append(bar)
+
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	body.custom_minimum_size = Vector2(560, 300)
+	var metas: Array = m["metas"]
+	if tab == "partie":
+		_tab_game_rules(body, s, metas, host, push)
+	elif tab == "serveur":
+		for c: Control in server_fields(_server_form, _on_server_form):
+			body.add_child(c)
+		var urls: Array = m["urls"]
+		var hint := "Les joueurs du réseau local voient cette partie dans leur liste."
+		if not urls.is_empty():
+			hint += " Sinon, adresse à saisir : %s" % "  ou  ".join(PackedStringArray(urls))
+		body.add_child(UI.small(hint))
+	else:
+		for g: Dictionary in metas:
+			if g["id"] == tab:
+				_tab_game(body, s, g, host, push)
+	kids.append(body)
+
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 12)
+	var note := "Les changements s'appliquent tout de suite." if host else "Seul l'hôte peut les modifier."
+	if pad_nav:
+		note += " %s / %s : onglets." % [Pad.label(JOY_BUTTON_LEFT_SHOULDER), Pad.label(JOY_BUTTON_RIGHT_SHOULDER)]
+	var nl := UI.small(note)
+	nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	foot.add_child(nl)
+	foot.add_child(UI.button("Terminé", "big", func() -> void: close_game_settings.call_deferred()))
+	kids.append(foot)
+
+	_fill_overlay(kids, 620)
+	_tab = tab
+	if pad_nav:
+		_pad_focusables(_overlay_card, true)
+		_restore_focus(_overlay_card, keep_focus)
+
+
+## Ligne « libellé … contrôle » de la fenêtre des réglages.
+static func _setting_row(text: String, control: Control) -> HBoxContainer:
+	var h := UI.row(text, [control])
+	h.get_child(0).add_theme_font_size_override("font_size", 16)
+	h.get_child(0).custom_minimum_size.x = 260
+	return h
+
+
+func _tab_game_rules(body: VBoxContainer, s: Dictionary, metas: Array, host: bool, push: Callable) -> void:
+	body.add_child(_setting_row("Nombre de manches", _stepper(s["rounds"], 1, 15, 1, "", host, func(v: float) -> void:
+		s["rounds"] = int(v)
+		push.call())))
+
+	var order := HBoxContainer.new()
+	order.add_theme_constant_override("separation", 6)
+	for o: Array in [["alternate", "Alterné"], ["random", "Aléatoire"], ["list", "Choisi"]]:
+		var key: String = o[0]
+		var b := UI.button(o[1], "small", func() -> void:
+			if host:
+				s["order"] = key
+				push.call())
+		b.disabled = not host and s["order"] != key
+		if s["order"] == key:
+			UI.mark_selected(b)
+		order.add_child(b)
+	body.add_child(_setting_row("Ordre des jeux", order))
+
+	if s["order"] == "list":
+		# une case par manche : un clic passe au jeu suivant
+		body.add_child(UI.label("Jeu de chaque manche", 16))
+		var list: Array = s["list"]
+		var chosen := UI.flow()
+		for i in int(s["rounds"]):
+			var cur := 0
+			for k in metas.size():
+				if i < list.size() and list[i] == metas[k]["id"]:
+					cur = k
+			var b := UI.button("%d. %s" % [i + 1, metas[cur]["name"]], "small", func() -> void:
+				while list.size() <= i:
+					list.append(metas[0]["id"])
+				list[i] = metas[(cur + 1) % metas.size()]["id"]
+				push.call())
+			b.disabled = not host
+			chosen.add_child(b)
+		body.add_child(chosen)
+		body.add_child(UI.small("Clique sur une manche pour changer de jeu."))
+	else:
+		body.add_child(UI.label("Jeux inclus", 16))
+		var games: Array = s["games"]
+		var inc := UI.flow()
+		for g: Dictionary in metas:
+			var cb := _check(g["name"], games.has(g["id"]), host, func(on: bool) -> void:
+				var next := []
+				for x: Dictionary in metas:
+					if (on if x["id"] == g["id"] else games.has(x["id"])):
+						next.append(x["id"])
+				s["games"] = next
+				push.call())
+			cb.add_theme_font_size_override("font_size", 16)
+			inc.add_child(cb)
+		body.add_child(inc)
+
+
+## Réglages propres à un jeu, générés depuis son schéma (server/metas.gd).
+func _tab_game(body: VBoxContainer, s: Dictionary, g: Dictionary, host: bool, push: Callable) -> void:
+	var desc := UI.small(str(g.get("description", "")))
+	desc.add_theme_font_size_override("font_size", 13)
+	body.add_child(desc)
+	var included: bool = s["games"].has(g["id"]) or (s["order"] == "list" and s["list"].has(g["id"]))
+	if not included:
+		body.add_child(UI.label("Ce jeu n'est pas dans la partie (onglet Partie).", 14, UI.ACCENT))
+	var game_vals: Dictionary = s["game"]
+	if not game_vals.has(g["id"]):
+		game_vals[g["id"]] = {}
+	var vals: Dictionary = game_vals[g["id"]]
+	var defs: Dictionary = g["settings"]
+	for key: String in defs:
+		var def: Dictionary = defs[key]
+		var text: String = def["label"]
+		if def["type"] == "number":
+			body.add_child(_setting_row(text, _stepper(vals.get(key, def["default"]), def["min"], def["max"], def.get("step", 1), def.get("unit", ""), host, func(v: float) -> void:
+				vals[key] = v
+				push.call())))
+		elif def["type"] == "bool":
+			body.add_child(_setting_row(text, _toggle(bool(vals.get(key, def["default"])), host, func(on: bool) -> void:
+				vals[key] = on
+				push.call())))
+		else:
+			var options: Array = def["options"]
+			var chosen: Array = vals.get(key, [])
+			body.add_child(UI.label(text, 16))
+			var chips := UI.flow()
+			for opt: String in options:
+				chips.add_child(_check(opt, chosen.is_empty() or chosen.has(opt), host, func(on: bool) -> void:
+					var cur: Array = chosen if not chosen.is_empty() else options
+					var next := []
+					for o: String in options:
+						if (on if o == opt else cur.has(o)):
+							next.append(o)
+					vals[key] = [] if next.size() == options.size() else next  # tout coché = pas de restriction
+					push.call()))
+			body.add_child(chips)
 
 
 # ---------- lobby à la manette ----------
@@ -680,6 +909,7 @@ func exit_pad_nav() -> void:
 	if not pad_nav:
 		return
 	pad_nav = false
+	close_game_settings()
 	var f := get_viewport().gui_get_focus_owner()
 	if f and lobby.is_ancestor_of(f):
 		f.release_focus()
@@ -687,7 +917,7 @@ func exit_pad_nav() -> void:
 	pad_nav_changed.emit(false)
 
 
-## Rend les contrôles du panneau navigables (on) ou les remet comme pour la souris (off). Les champs de texte
+## Rend les contrôles navigables (on) ou les remet comme pour la souris (off). Les champs de texte
 ## restent hors navigation (pas de clavier sur une manette) ; les nombres se règlent à gauche / droite.
 func _pad_focusables(c: Node, on: bool) -> void:
 	for k in c.get_children():
@@ -703,35 +933,34 @@ func _pad_focusables(c: Node, on: bool) -> void:
 		if k is LineEdit:
 			k.focus_mode = Control.FOCUS_NONE if on else Control.FOCUS_ALL
 		elif k is BaseButton:
-			k.focus_mode = Control.FOCUS_ALL if on and not k.disabled else Control.FOCUS_NONE
+			k.focus_mode = Control.FOCUS_ALL if on and not k.disabled and k.visible else Control.FOCUS_NONE
 		_pad_focusables(k, on)
 
 
-## Chemin (indices des enfants) du contrôle qui a le focus dans le panneau, pour le retrouver après reconstruction.
-func _focus_path() -> Array:
+## Chemin (indices des enfants) du contrôle qui a le focus sous root, pour le retrouver après reconstruction.
+func _focus_path(root_node: Control) -> Array:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	if f == null or not _lobby_box.is_ancestor_of(f):
+	if f == null or not root_node.is_ancestor_of(f):
 		return []
 	var path: Array = []
-	while f != _lobby_box:
+	while f != root_node:
 		path.push_front(f.get_index())
 		f = f.get_parent()
 	return path
 
 
-func _restore_focus(path: Array) -> void:
-	var n: Node = _lobby_box
+func _restore_focus(root_node: Control, path: Array) -> void:
+	var n: Node = root_node
 	for i: int in path:
 		if i >= n.get_child_count():
 			n = null
 			break
 		n = n.get_child(i)
-	var target: Control = n if n is Control and n != _lobby_box and n.focus_mode == Control.FOCUS_ALL else _find_pad_first(_lobby_box)
+	var target: Control = n if n is Control and n != root_node and n.focus_mode == Control.FOCUS_ALL else _find_pad_first(root_node)
 	if target:
 		(func() -> void:
 			if is_instance_valid(target) and target.is_inside_tree():
-				target.grab_focus()
-				_lobby_scroll.ensure_control_visible(target)).call_deferred()
+				target.grab_focus()).call_deferred()
 
 
 static func _find_pad_first(c: Node) -> Control:
@@ -744,12 +973,32 @@ static func _find_pad_first(c: Node) -> Control:
 	return null
 
 
+static func _find_meta(c: Node, key: String) -> Control:
+	for k in c.get_children():
+		if k is Control and k.has_meta(key):
+			return k
+		var sub := _find_meta(k, key)
+		if sub:
+			return sub
+	return null
+
+
 func _input(ev: InputEvent) -> void:
+	if _tab != "":
+		# fenêtre des réglages ouverte : Échap / B / Start la ferment, LB / RB changent d'onglet
+		var start_b: int = Pad.bindings.get("panneau", JOY_BUTTON_START)
+		if ev.is_action_pressed("ui_cancel") or (ev is InputEventJoypadButton and ev.pressed and ev.button_index == start_b):
+			get_viewport().set_input_as_handled()
+			close_game_settings()
+			return
+		if ev is InputEventJoypadButton and ev.pressed and (ev.button_index == JOY_BUTTON_LEFT_SHOULDER or ev.button_index == JOY_BUTTON_RIGHT_SHOULDER):
+			get_viewport().set_input_as_handled()
+			_switch_tab(-1 if ev.button_index == JOY_BUTTON_LEFT_SHOULDER else 1)
+			return
 	if not pad_nav:
 		return
 	var f := get_viewport().gui_get_focus_owner()
-	if f is OptionButton and f.get_popup().visible:
-		return  # la liste ouverte gère elle-même la croix, A et B
+	var area: Control = _overlay_card if _tab != "" else _lobby_box
 	var start: int = Pad.bindings.get("panneau", JOY_BUTTON_START)
 	if (ev is InputEventJoypadButton and ev.pressed and ev.button_index == start) or ev.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
@@ -759,6 +1008,6 @@ func _input(ev: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		f.value += f.step * (1.0 if ev.is_action_pressed("ui_right") else -1.0)
 		return
-	if (f == null or not lobby.is_ancestor_of(f)) and (ev.is_action_pressed("ui_up") or ev.is_action_pressed("ui_down") or ev.is_action_pressed("ui_accept")):
+	if (f == null or not area.is_ancestor_of(f)) and (ev.is_action_pressed("ui_up") or ev.is_action_pressed("ui_down") or ev.is_action_pressed("ui_accept")):
 		get_viewport().set_input_as_handled()
-		_restore_focus([])
+		_restore_focus(area, [])

@@ -13,6 +13,7 @@ extends Node
 ##   --use-at=14,20    envoie « utiliser l'objet » (parcours) à ces instants
 ##   --looks=x,y,z,yaw,pitch,dist;…   vue imposée 1.2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z)
 ##   --menu=jouer|creer|personnage|options   ouvre directement cet écran du menu principal
+##   --reglages=partie|parkour|mortar|serveur   ouvre la fenêtre des réglages de la partie au lobby, sur cet onglet
 ##   --keys=2:ui_down,2.5:ui_accept,3:joy0   actions d'interface ou boutons de manette (joyN) simulés à ces instants
 ##   --trace           affiche l'état du joueur et les performances à chaque capture
 ##   --quality=basse|moyenne|haute, --name=…, --hat=…, --no-save, --vsync=off
@@ -21,6 +22,7 @@ var main: Main
 var _bots_applied := false
 var _autostarted := false
 var _settings_applied := false
+var _settings_shown := false
 var _shots: Array = []
 var _shot_path := ""
 var _shot_count := 0
@@ -54,6 +56,9 @@ func _ready() -> void:
 
 
 func on_lobby(m: Dictionary) -> void:
+	if Config.args.has("reglages") and not _settings_shown:
+		_settings_shown = true
+		main.ui.open_game_settings(str(Config.args["reglages"]))
 	if m["hostId"] != main.my_id:
 		return
 	if not _settings_applied and (Config.args.has("games") or Config.args.has("rounds") or Config.args.has("set")):

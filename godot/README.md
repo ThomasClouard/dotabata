@@ -35,7 +35,7 @@ Sur une petite carte graphique, le moteur de rendu « Compatibilité » est envi
 godot --path godot --rendering-method gl_compatibility --rendering-driver opengl3
 ```
 
-Le panneau du lobby propose trois niveaux de graphismes (légers, moyens, élevés). Au premier lancement,
+Le menu Options propose trois niveaux de graphismes (légers, moyens, élevés). Au premier lancement,
 les puces intégrées Intel et le web démarrent en « moyens », les autres en « élevés ».
 
 ## Réseau
@@ -87,6 +87,7 @@ Après `--` sur bureau, ou dans l'URL sur le web (`?server=…&bots=9`) :
 | `--shot=chemin.png --shot-at=5,12` | captures d'écran à ces instants, puis quitte |
 | `--looks=x,y,z,lacet,tangage,dist;…` | vue imposée 1,2 s avant chaque capture (dist = 0 : téléporte le joueur en x,y,z) |
 | `--menu=jouer\|creer\|personnage\|options\|manette` | ouvre directement cet écran du menu |
+| `--reglages=partie\|parkour\|mortar\|serveur` | ouvre la fenêtre des réglages de la partie au lobby, sur cet onglet |
 | `--keys=3:ui_down,3.3:ui_accept,4:joy0` | navigation simulée : action d'interface ou bouton de manette (`joyN`) à cet instant |
 | `--trace`, `--quit-at=30`, `--vsync=off` | mesures et arrêt automatique |
 

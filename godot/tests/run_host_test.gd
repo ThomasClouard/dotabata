@@ -119,6 +119,14 @@ func _run() -> void:
 	st["game"]["mortar"]["buildTime"] = 5
 	a.send({"t": "settings", "settings": st})
 	_ok(await _until([a, b], func() -> bool: return a.last("lobby")["players"].size() == 5), "3 bots ajoutés")
+	# retrait d'un bot précis (croix sur sa carte), puis on revient à 3
+	var first_bot: String = a.last("lobby")["players"].filter(func(p: Dictionary) -> bool: return p["isBot"])[0]["id"]
+	b.send({"t": "bots", "remove": first_bot})  # pas l'hôte : ignoré
+	a.send({"t": "bots", "remove": a.last("lobby")["players"].filter(func(p: Dictionary) -> bool: return not p["isBot"])[0]["id"]})  # un humain : ignoré
+	a.send({"t": "bots", "remove": first_bot})
+	_ok(await _until([a, b], func() -> bool: return a.last("lobby")["players"].size() == 4 and not a.last("lobby")["players"].any(func(p: Dictionary) -> bool: return p["id"] == first_bot)), "bot précis retiré")
+	a.send({"t": "bots", "n": 3})
+	_ok(await _until([a, b], func() -> bool: return a.last("lobby")["players"].size() == 5), "bot remis")
 	a.send({"t": "start"})
 	_ok(await _until([a, b], func() -> bool: return b.last("round") != null), "manche lancée")
 	_ok(b.last("round")["gameId"] == "mortar" and b.last("round")["spawns"].size() == 5, "manche de mortier pour 5")

@@ -31,8 +31,13 @@ jobs:
           curl.exe -L --fail -o godot.zip "https://github.com/godotengine/godot/releases/download/$env:GODOT_VERSION/Godot_v$($env:GODOT_VERSION)_win64.exe.zip"
           Expand-Archive godot.zip -DestinationPath $dir
           Remove-Item godot.zip
+          # Le lanceur console relance l'exe principal posé à côté de lui, trouvé d'après son propre nom :
+          # godot_console.exe cherche godot.exe, d'où les deux copies.
           $console = Get-ChildItem $dir -Recurse -Filter "*_console.exe" | Select-Object -First 1
+          $main = Get-ChildItem $dir -Recurse -Filter "Godot_v*_win64.exe" | Select-Object -First 1
           Copy-Item $console.FullName (Join-Path $dir "godot_console.exe")
+          Copy-Item $main.FullName (Join-Path $dir "godot.exe")
+          & (Join-Path $dir "godot_console.exe") --version
           $dir | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
       # Les modèles d'export (1,3 Go à télécharger) : seuls ceux de Windows sont gardés d'une compilation à l'autre.

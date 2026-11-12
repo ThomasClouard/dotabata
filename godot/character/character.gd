@@ -129,6 +129,7 @@ var _dead_t := 0.0
 var _pile_y := 0.0
 var _pile_rx := 0.0
 var _pile_rz := 0.0
+var _ragdoll: Array[RigidBody3D] = []  # os simulés par Jolt après la mort (effets physiques activés)
 
 
 static func _statics() -> void:
@@ -283,6 +284,7 @@ func set_look(color: int, kind: String) -> void:
 	_kind = kind
 	_sp = SPECS[kind]
 	var sp := _sp
+	_free_ragdoll()
 	for c in _content.get_children():
 		_content.remove_child(c)
 		c.queue_free()
@@ -505,10 +507,70 @@ func die() -> void:
 	_pile_y = 0.16
 	_pile_rx = 1.42 + randf_range(-0.1, 0.1)
 	_pile_rz = randf_range(-0.5, 0.5)
+	if Debris.enabled() and is_inside_tree():
+		_spawn_ragdoll()
+
+
+## Le squelette se désarticule : chaque os devient un corps rigide qui tombe, roule et s'entasse au sol.
+## Les os ne se heurtent pas entre eux (ils se chevauchent au départ), seulement le décor.
+func _spawn_ragdoll() -> void:
+	_pose_limbs()  # place les os des membres sur la pose du moment
+	var deb := Debris.current
+	var center := _content.global_transform * Vector3(0, CENTER, 0)
+	var vel := _last_vel.limit_length(12.0)
+	var pieces: Array[Node3D] = []
+	for c in _bones.get_children():
+		pieces.append(c)
+	for l in _limbs:
+		pieces.append_array([l.upper, l.lower, l.joint, l.end])
+	for piece in pieces:
+		var xf := piece.global_transform
+		var shape: Shape3D
+		var at: Transform3D
+		if piece is MeshInstance3D:
+			var aabb := (piece as MeshInstance3D).get_aabb()
+			var box := BoxShape3D.new()
+			box.size = (aabb.size * xf.basis.get_scale()).max(Vector3.ONE * 0.05)
+			shape = box
+			at = Transform3D(xf.basis.orthonormalized(), xf * aabb.get_center())
+		else:  # crâne : un groupe de formes
+			var sph := SphereShape3D.new()
+			sph.radius = 0.2 * xf.basis.get_scale().x
+			shape = sph
+			at = Transform3D(xf.basis.orthonormalized(), xf.origin)
+		var out := (at.origin - center)
+		out.y = 0.0
+		var v := vel + out.normalized() * randf_range(0.2, 0.8) + Vector3(0, randf_range(0.3, 1.2), 0)
+		_ragdoll.append(deb.bone(piece.duplicate(), xf, shape, at, v))
+	if _sp.get("acc", "") != "":  # l'accessoire tombe aussi
+		var hx := _hat.global_transform
+		var sph := SphereShape3D.new()
+		sph.radius = 0.22
+		var hat_at := Transform3D(hx.basis.orthonormalized(), hx * Vector3(0, 0.3, 0))
+		_ragdoll.append(deb.bone(_hat.duplicate(), hx, sph, hat_at, vel + Vector3(randf_range(-1, 1), 3.0, randf_range(-1, 1)), 0.2))
+		_hat.visible = false
+	_bones.visible = false
+	_limb_bones.visible = false
+
+
+func _free_ragdoll() -> void:
+	for b in _ragdoll:
+		if Debris.current:
+			Debris.current.forget(b)
+		elif is_instance_valid(b):
+			b.queue_free()
+	_ragdoll.clear()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_free_ragdoll()
 
 
 func _revive() -> void:
 	dead = false
+	_free_ragdoll()
+	_hat.visible = true
 	for m in _skin_meshes:
 		m.visible = true
 	_eyes.visible = true
@@ -673,7 +735,7 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 			for i in MAX_HITS:
 				_hits_world[i] = Vector4.ZERO
 			_skin.set_shader_parameter("hits", _hits_world)
-		_bones.visible = dead or not _hits.is_empty()
+		_bones.visible = (dead or not _hits.is_empty()) and _ragdoll.is_empty()
 		_limb_bones.visible = _bones.visible
 
 

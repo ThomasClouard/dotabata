@@ -16,6 +16,8 @@ extends Node
 ##   --reglages=partie|parkour|mortar|serveur   ouvre la fenêtre des réglages de la partie au lobby, sur cet onglet
 ##   --keys=2:ui_down,2.5:ui_accept,3:joy0   actions d'interface ou boutons de manette (joyN) simulés à ces instants
 ##   --trace           affiche l'état du joueur et les performances à chaque capture
+##   --perf=chemin.csv journal des performances toutes les 0,5 s (images/s, pire image, mémoire, objets, corps physiques)
+##   --stress=40       pire cas des effets physiques à cet instant : tous les personnages meurent et 2 blocs éclatent sur chaque île (160 éclats, le plafond)
 ##   --quality=basse|moyenne|haute, --name=…, --hat=…, --no-save, --vsync=off
 
 var main: Main
@@ -33,6 +35,10 @@ var _looks: Array = []
 var _uses: Array = []
 var _look_at := 0
 var _keys: Array = []  # [instant, action]
+var _perf: FileAccess
+var _perf_acc := 0.0
+var _perf_frames := 0
+var _perf_worst := 0.0
 
 
 func _ready() -> void:
@@ -53,6 +59,9 @@ func _ready() -> void:
 		_keys.append([float(parts[0]), parts[1]])
 	if Config.args.has("quit-at"):
 		_quit_at = float(Config.args["quit-at"])
+	if Config.args.has("perf"):
+		_perf = FileAccess.open(str(Config.args["perf"]), FileAccess.WRITE)
+		_perf.store_line("t;phase;fps;pire_ms;process_ms;physique_ms;objets;noeuds;orphelins;ressources;memoire_mo;corps_actifs;corps_debris;dessins")
 
 
 func on_lobby(m: Dictionary) -> void:
@@ -112,6 +121,8 @@ func drive(_dt: float) -> void:
 func _process(dt: float) -> void:
 	var before := _t
 	_t += dt
+	if _perf:
+		_log_perf(dt)
 	if Config.args.has("hits") and before < 3.0 and _t >= 3.0:
 		for p: ClientPlayer in main.players.values():
 			p.chr.add_hit(Vector3(0.12, 1.0, 0.2), 0.2)
@@ -120,6 +131,9 @@ func _process(dt: float) -> void:
 	if Config.args.has("die") and before < 6.0 and _t >= 6.0:
 		for p: ClientPlayer in main.players.values():
 			p.chr.die()
+	var st := float(Config.args.get("stress", "-1"))
+	if st > 0.0 and before < st and _t >= st:
+		_stress()
 	while not _keys.is_empty() and _t >= _keys[0][0]:
 		var a: String = _keys.pop_front()[1]
 		for pressed in [true, false]:
@@ -177,3 +191,42 @@ func _capture(last: bool) -> void:
 			print("perso pos=", me.chr.position, " rot=", me.chr.rotation, " squash=", me.chr._squash.scale, " pivot=", me.chr._pivot.transform, " sq=", me.chr._sq, " spin=", me.chr._spin, " visible=", me.chr.visible)
 	if last and _quit_at < 0.0:
 		get_tree().quit()
+
+
+## Une ligne du journal `--perf` toutes les 0,5 s : moyenne des images/s, pire image de la fenêtre, compteurs du moteur.
+func _log_perf(dt: float) -> void:
+	_perf_acc += dt
+	_perf_frames += 1
+	_perf_worst = maxf(_perf_worst, dt)
+	if _perf_acc < 0.5:
+		return
+	var deb := Debris.current
+	_perf.store_line("%.1f;%s;%.1f;%.1f;%.2f;%.2f;%d;%d;%d;%d;%.1f;%d;%d;%d" % [
+		_t, main._phase, _perf_frames / _perf_acc, _perf_worst * 1000.0,
+		Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+		Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		Performance.get_monitor(Performance.OBJECT_COUNT), Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+		Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT),
+		Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
+		Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS), deb._bodies.size() if deb else 0,
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
+	_perf.flush()
+	_perf_acc = 0.0
+	_perf_frames = 0
+	_perf_worst = 0.0
+
+
+## `--stress` : le pire cas des effets physiques d'un coup (squelettes de tout le monde + éclats au plafond).
+func _stress() -> void:
+	for p: ClientPlayer in main.players.values():
+		p.chr.die()
+	var deb := Debris.current
+	if deb == null or not (main._game is MortarClient):
+		return
+	var g: MortarClient = main._game
+	var mat: Material = g.inst["wood"].material_override
+	for i in g.n:
+		var c := MortarShared.plot_center(i, g.n)
+		for k in 2:
+			var p := c + Vector3(randf_range(-3, 3), 0.5 + (k % 4), randf_range(-3, 3))
+			deb.shatter(p, Basis(Vector3.UP, MortarShared.plot_yaw(i, g.n)), 0.98, mat, c + Vector3(0, -0.5, 0))

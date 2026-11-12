@@ -63,6 +63,16 @@ func _rebuild() -> void:
 	for k: String in MortarShared.MAT_KEYS:
 		inst[k].multimesh.visible_instance_count = counts[k]
 	dirty = true
+	_sync_ground()
+
+
+## Décor solide des éclats et des os (Jolt) : toutes les îles et tous les blocs.
+func _sync_ground() -> void:
+	if Debris.enabled():
+		var all: Array = MortarShared.colliders(n, {}, -1)
+		for p in n:
+			all.append_array(MortarShared.colliders(n, blocks, p).slice(n))
+		ctx.debris.set_ground(all)
 
 
 func _block_pos(b: Dictionary) -> Vector3:
@@ -70,13 +80,19 @@ func _block_pos(b: Dictionary) -> Vector3:
 	return Vector3(c[0], c[1], c[2])
 
 
-func _remove_blocks(keys: Array) -> void:
+## Retire des blocs ; détruits par une explosion en `from`, ils volent en éclats (effets physiques activés).
+func _remove_blocks(keys: Array, from: Variant = null) -> void:
+	var shatter := from != null and Debris.enabled()
 	for key: String in keys:
 		if not blocks.has(key):
 			continue
 		var b: Dictionary = blocks[key]
 		blocks.erase(key)
-		ctx.particles.burst(_block_pos(b), 8, [MortarShared.MATS[b["mat"]]["color"]], 5.0, 0.22, 0.8)
+		var bp := _block_pos(b)
+		ctx.particles.burst(bp, 4 if shatter else 8, [MortarShared.MATS[b["mat"]]["color"]], 5.0, 0.22, 0.8)
+		if shatter:
+			var basis := Basis(Vector3.UP, MortarShared.plot_yaw(b["plot"], n))
+			ctx.debris.shatter(bp, basis, 0.98, inst[b["mat"]].material_override, from)
 	_rebuild()
 
 
@@ -214,6 +230,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 	var mc := MortarShared.plot_center(my_plot, n)
 	grid = Gfx.mesh(_grid_mesh(MortarShared.GRID), Gfx.flat(0xffffff, {"opacity": 0.6}), mc.x, 0.06, mc.z, ctx.world, false)
 	grid.rotation.y = MortarShared.plot_yaw(my_plot, n)
+	_sync_ground()
 
 	# chaque personnage porte son mortier
 	for id: String in ctx.players:
@@ -327,7 +344,7 @@ func on_message(m: Dictionary) -> void:
 				shells.erase(id)
 			if m["t"] == "boom":
 				_explosion(_v3(m["p"]), m["r"], m["kind"])
-				_remove_blocks(m["removed"])
+				_remove_blocks(m["removed"], _v3(m["p"]))
 		"hp":
 			hp[m["id"]] = m["hp"]
 		"dead":
@@ -423,8 +440,10 @@ func on_frame(dt: float) -> void:
 			var yaw := ctx.cam_yaw
 			var l := MortarShared.launch(ctx.body.px, ctx.body.py, ctx.body.pz, yaw, power)
 			var reach := MortarShared.shell_range(l)
-			marker.position = Vector3(l[0] + sin(yaw) * reach, 0.12, l[2] + cos(yaw) * reach)
-			marker.visible = true
+			# en tombant dans le vide, l'obus ne remonterait jamais à y = 0 : portée indéfinie, pas de marqueur
+			marker.visible = is_finite(reach)
+			if marker.visible:
+				marker.position = Vector3(l[0] + sin(yaw) * reach, 0.12, l[2] + cos(yaw) * reach)
 			marker.rotation.y = t * 3.0
 			if inp.up("Mouse0", "KeyF") or not inp.down("Mouse0", "KeyF"):
 				ctx.send_game({"t": "fire", "yaw": yaw, "power": power})

@@ -88,6 +88,9 @@ Après `--` :
 | `--reglages=partie\|parkour\|mortar\|serveur` | ouvre la fenêtre des réglages de la partie au lobby, sur cet onglet |
 | `--keys=3:ui_down,3.3:ui_accept,4:joy0` | navigation simulée : action d'interface ou bouton de manette (`joyN`) à cet instant |
 | `--trace`, `--quit-at=30`, `--vsync=off` | mesures et arrêt automatique |
+| `--physique=on\|off` | force les effets physiques (éclats des blocs, os qui s'éparpillent, simulés par Jolt) |
+| `--perf=chemin.csv` | journal des performances toutes les 0,5 s : images/s, pire image, temps de physique, objets, nœuds, mémoire, corps Jolt |
+| `--stress=30` | pire cas des effets physiques à cet instant : tous les personnages meurent et 160 éclats volent |
 
 Exemple : une manche de mortier contre neuf bots, avec deux captures.
 

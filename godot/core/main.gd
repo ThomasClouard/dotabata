@@ -13,6 +13,7 @@ var input := GameInput.new()
 var sfx := Sfx.new()
 var env := GameEnv.new()
 var particles := Particles.new()
+var debris := Debris.new()  # éclats et os simulés par Jolt (purement visuels)
 var ui := GameUI.new()
 var world := Node3D.new()  # contenu du jeu en cours ; vidé à chaque changement de scène
 var char_layer := Node3D.new()
@@ -64,6 +65,7 @@ func _ready() -> void:
 	add_child(world)
 	add_child(char_layer)
 	add_child(particles)
+	add_child(debris)
 	camera.fov = 58.0
 	camera.near = 0.1
 	camera.far = 900.0
@@ -418,6 +420,7 @@ func _set_game(g: ClientGame, init: Variant) -> void:
 	for c in world.get_children():
 		world.remove_child(c)
 		c.queue_free()
+	debris.clear()
 	ui.hud_clear()
 	_active = true
 	_spectate = null

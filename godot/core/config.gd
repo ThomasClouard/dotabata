@@ -19,6 +19,8 @@ static var args := {}
 static var fullscreen := false
 static var sfx_volume := 0.8
 static var mouse_sens := 1.0
+## Effets physiques (éclats des blocs, squelettes qui se désarticulent), simulés par Jolt et purement visuels.
+static var physics_fx := true
 
 
 static func load_all() -> void:
@@ -42,6 +44,7 @@ static func load_all() -> void:
 	fullscreen = bool(cf.get_value("options", "plein_ecran", false))
 	sfx_volume = clampf(float(cf.get_value("options", "volume", 0.8)), 0.0, 1.0)
 	mouse_sens = clampf(float(cf.get_value("options", "souris", 1.0)), 0.25, 3.0)
+	physics_fx = bool(cf.get_value("options", "effets_physiques", true))
 	Pad.load_cfg(cf)
 	if args.has("name"):
 		profile["name"] = str(args["name"]).left(16)
@@ -50,6 +53,8 @@ static func load_all() -> void:
 		profile["color"] = Protocol.HAT_COLOR[args["hat"]]
 	if args.has("quality"):
 		quality = maxi(0, QUALITY_KEYS.find(str(args["quality"])))
+	if args.has("physique"):
+		physics_fx = str(args["physique"]) != "off"
 
 
 static func save() -> void:
@@ -67,6 +72,7 @@ static func save() -> void:
 	cf.set_value("options", "plein_ecran", fullscreen)
 	cf.set_value("options", "volume", sfx_volume)
 	cf.set_value("options", "souris", mouse_sens)
+	cf.set_value("options", "effets_physiques", physics_fx)
 	Pad.save_cfg(cf)
 	cf.save(PATH)
 

@@ -42,6 +42,10 @@ func on_enter(c: Main, _init_data: Variant) -> void:
 	ctx.set_sea(-9.0, 0x1fb6e0)
 	var s := ctx.world
 	place(s, Gfx.slab(32, 1.5, 32, 0x7ddc6a, {"top": 0xffffff, "top_map": Tex.soft("#8fe07a", "#a8ec8c"), "top_uv": Vector2(4, 4)}), cols[0])
+	# herbe au vent, sauf sous le trampoline et les marches
+	var herbe := Gfx.grass(Vector2(31, 31), 5.0, 0x4fb945, 0xa9ea7e, [Rect2(4.2, 4.2, 3.6, 3.6), Rect2(-13, 3, 7.5, 9.5)], 7)
+	if herbe:
+		s.add_child(herbe)
 
 	# trampoline : socle + toile cible
 	var tr := place(s, Node3D.new(), cols[1])

@@ -3,7 +3,7 @@ extends Node3D
 ## Ciel, soleil, brouillard, mer, nuages et post-traitement. Les réglages s'adaptent au moteur de rendu
 ## (Forward+, ou Compatibilité si la carte graphique l'impose) et au niveau de qualité choisi.
 
-const SUN_DIR := Vector3(0.45, 0.8, 0.35)
+const SUN_DIR := Vector3(0.5, 0.4, 0.42)  # soleil de fin d'après-midi : bas et doré, ombres longues
 
 var env := Environment.new()
 var sun := DirectionalLight3D.new()
@@ -16,6 +16,8 @@ var forward_plus := true
 var _sky_mat := ShaderMaterial.new()
 var _sea_mat := ShaderMaterial.new()
 var _cam_attr := CameraAttributesPractical.new()
+var _vignette := ColorRect.new()  # assombrit doucement les coins (multiplication, sans relire l'image)
+var _cloud_mat := ShaderMaterial.new()
 
 
 func _ready() -> void:
@@ -29,10 +31,18 @@ func _ready() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.55
+	env.ambient_light_energy = 0.46
+	# l'ombre prend une teinte bleutée (contraste chaud au soleil, froid à l'ombre)
+	env.ambient_light_color = Color("#a9c6ff")
+	env.ambient_light_sky_contribution = 0.7
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_white = 3.0
+	env.tonemap_white = 3.2
+	env.tonemap_exposure = 0.95
+	# essais : --tonemap=agx|filmic|aces|linear
+	var tm := str(Config.args.get("tonemap", ""))
+	if tm != "":
+		env.tonemap_mode = {"agx": Environment.TONE_MAPPER_AGX, "filmic": Environment.TONE_MAPPER_FILMIC, "aces": Environment.TONE_MAPPER_ACES, "linear": Environment.TONE_MAPPER_LINEAR}.get(tm, env.tonemap_mode)
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_depth_begin = 90.0
@@ -41,15 +51,15 @@ func _ready() -> void:
 	env.fog_sky_affect = 0.0
 	env.fog_aerial_perspective = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.12
-	env.adjustment_contrast = 1.04
+	env.adjustment_saturation = 1.22
+	env.adjustment_contrast = 1.08
 	var we := WorldEnvironment.new()
 	we.environment = env
 	we.camera_attributes = _cam_attr
 	add_child(we)
 
-	sun.light_color = Gfx.col(0xfff4dc)
-	sun.light_energy = 0.95
+	sun.light_color = Gfx.col(0xffdcaa)
+	sun.light_energy = 1.15
 	sun.directional_shadow_blend_splits = true
 	sun.shadow_bias = 0.06
 	sun.shadow_normal_bias = 1.6
@@ -70,12 +80,30 @@ func _ready() -> void:
 		env.ambient_light_energy = 0.42
 		env.tonemap_white = 4.0
 	_build_clouds()
+	# vignettage : sous l'interface, au-dessus de la 3D
+	var vl := CanvasLayer.new()
+	vl.layer = -1
+	add_child(vl)
+	var vs := Shader.new()
+	vs.code = """shader_type canvas_item;
+render_mode blend_mul, unshaded;
+void fragment() {
+	vec2 d = (UV - 0.5) * vec2(1.25, 1.0);
+	float v = smoothstep(0.38, 0.95, length(d));
+	COLOR = vec4(mix(vec3(1.0), vec3(0.62, 0.58, 0.78), v), 1.0);
+}"""
+	var vm := ShaderMaterial.new()
+	vm.shader = vs
+	_vignette.material = vm
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vl.add_child(_vignette)
 	set_sky(0x8fd3ff)
 	apply_quality(Config.quality)
 
 
-## Applique un niveau de qualité : 0 = légers (ni ombres ni halo), 1 = moyens (ombres, halo, anticrénelage rapide),
-## 2 = élevés (ombres fines à pénombre, occlusion ambiante, reflets en espace écran, flou des lointains).
+## Applique un niveau de qualité : 0 = légers (ni ombres ni halo), 1 = moyens (ombres, halo, vignettage,
+## anticrénelage rapide), 2 = élevés (ombres fines à pénombre, occlusion ambiante, herbe).
 func apply_quality(q: int) -> void:
 	quality = q
 	var full := q >= 2 and forward_plus
@@ -85,26 +113,20 @@ func apply_quality(q: int) -> void:
 	sun.light_angular_distance = 0.8 if full else 0.0  # pénombre qui s'élargit avec la distance
 	RenderingServer.directional_shadow_atlas_set_size(4096 if full else 2048, true)
 	env.glow_enabled = q >= 1
-	env.glow_intensity = 0.55 if forward_plus else 0.3
 	env.glow_strength = 0.9
-	env.glow_bloom = 0.04
-	env.glow_hdr_threshold = 1.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	env.ssao_enabled = full
 	env.ssao_radius = 1.2
 	env.ssao_intensity = 1.6
 	env.ssao_power = 1.4
-	# reflets en espace écran : les îles et les obstacles se reflètent dans la mer et sur la glace
-	env.ssr_enabled = full
-	env.ssr_max_steps = 56
-	env.ssr_fade_in = 0.2
-	env.ssr_fade_out = 2.5
-	env.ssr_depth_tolerance = 0.4
-	# léger flou des lointains, façon maquette
-	_cam_attr.dof_blur_far_enabled = full
-	_cam_attr.dof_blur_far_distance = 85.0
-	_cam_attr.dof_blur_far_transition = 120.0
-	_cam_attr.dof_blur_amount = 0.05
+	# Reflets en espace écran et flou des lointains retirés : ils coûtaient près de 7 ms par image sur une Radeon R9
+	# pour un effet peu visible ; ce budget sert à l'écume, aux nuages, à la végétation et au vignettage.
+	env.ssr_enabled = false
+	_cam_attr.dof_blur_far_enabled = false
+	env.glow_intensity = 0.7 if forward_plus else 0.35
+	env.glow_bloom = 0.02
+	env.glow_hdr_threshold = 1.0
+	_vignette.visible = q >= 1
 	var vp := get_viewport()
 	# MSAA + occlusion ambiante / reflets écran noircit l'image par blocs avec les vieux pilotes Radeon : FXAA à la place
 	var msaa := q >= 2 and not (full and Config.msaa_breaks_screen_fx())
@@ -112,12 +134,10 @@ func apply_quality(q: int) -> void:
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if q >= 1 and forward_plus and not msaa else Viewport.SCREEN_SPACE_AA_DISABLED
 	if Config.args.has("scale"):
 		vp.scaling_3d_scale = float(Config.args["scale"])
-	# mesure du coût de chaque effet : --fx=-ssr,-dof,-ssao,-msaa,-glow,-shadows
+	# mesure du coût de chaque effet : --fx=-ssao,-msaa,-glow,-shadows,-vignette,-grass
 	var off := str(Config.args.get("fx", "")).split(",", false)
-	if off.has("-ssr"):
-		env.ssr_enabled = false
-	if off.has("-dof"):
-		_cam_attr.dof_blur_far_enabled = false
+	if off.has("-vignette"):
+		_vignette.visible = false
 	if off.has("-ssao"):
 		env.ssao_enabled = false
 	if off.has("-msaa"):
@@ -175,10 +195,11 @@ static func _hue(p: float, q: float, t: float) -> float:
 
 func set_sky(color: int) -> void:
 	var lin := Gfx.col(color).srgb_to_linear()
-	var top := _hsl_offset(lin, -0.02, 0.12, -0.2).linear_to_srgb()
+	var top := _hsl_offset(lin, -0.02, 0.16, -0.26).linear_to_srgb()
 	horizon = lin.lerp(Color.WHITE, 0.42).linear_to_srgb()
 	_sky_mat.set_shader_parameter("top_color", top)
 	_sky_mat.set_shader_parameter("horizon_color", horizon)
+	_sea_mat.set_shader_parameter("sky_tint", horizon)
 	env.fog_light_color = horizon
 
 
@@ -220,15 +241,10 @@ func _build_clouds() -> void:
 			var p := Vector3(cx + (k - 3) * sc * 0.75 + randf() * sc * 0.4, cy + (k % 2) * sc * 0.25 + randf() * sc * 0.3 - absf(k - 3) * sc * 0.08, cz + (randf() - 0.5) * sc)
 			mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(s, s * 0.72, s)), p))
 			i += 1
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color.WHITE
-	m.roughness = 1.0
-	m.emission_enabled = true
-	m.emission = Color.WHITE
-	m.emission_energy_multiplier = 0.3
-	m.disable_fog = true
+	_cloud_mat.shader = load("res://gfx/shaders/clouds.gdshader")
+	_cloud_mat.set_shader_parameter("sun_dir", SUN_DIR.normalized())
 	clouds.multimesh = mm
-	clouds.material_override = m
+	clouds.material_override = _cloud_mat
 	clouds.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	clouds.custom_aabb = AABB(Vector3(-300, -20, -300), Vector3(600, 160, 600))
 	add_child(clouds)

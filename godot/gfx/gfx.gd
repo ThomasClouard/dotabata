@@ -22,6 +22,10 @@ static func mat(color: int, o: Dictionary = {}) -> StandardMaterial3D:
 	m.roughness = o.get("rough", 0.42)
 	m.metallic = o.get("metal", 0.0)
 	m.metallic_specular = 0.5
+	# contour lumineux doux : les objets se détachent du décor, façon jouet
+	m.rim_enabled = true
+	m.rim = 0.3
+	m.rim_tint = 0.6
 	if o.has("map"):
 		m.albedo_texture = o["map"]
 		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
@@ -174,12 +178,25 @@ static func balloon(color: int) -> Node3D:
 	return g
 
 
+static var _foliage_shader: Shader
+
+## Feuillage qui ondule au vent (dans le vertex shader) : houppiers des arbres, buissons. `sway` en mètres au sommet.
+static func foliage(color: int, sway := 0.08) -> ShaderMaterial:
+	if _foliage_shader == null:
+		_foliage_shader = load("res://gfx/shaders/foliage.gdshader")
+	var m := ShaderMaterial.new()
+	m.shader = _foliage_shader
+	m.set_shader_parameter("albedo", col(color))
+	m.set_shader_parameter("sway", sway)
+	return m
+
+
 ## Petit arbre rond stylisé.
 static func tree(h := 3.0, leaf := 0x52d681) -> Node3D:
 	var g := Node3D.new()
 	mesh(Shapes.cylinder(0.16, 0.24, h * 0.55, 8), mat(0x9c6644, {"rough": 0.8}), 0, h * 0.275, 0, g)
 	var s := Shapes.sphere(1.0, 14, 10)
-	var leaf_mat := mat(leaf, {"rough": 0.7})
+	var leaf_mat := foliage(leaf, 0.12)
 	for b in [[0.0, h * 0.72, 0.0, 0.9], [0.5, h * 0.6, 0.2, 0.6], [-0.45, h * 0.62, -0.25, 0.65], [0.1, h * 0.95, -0.1, 0.6]]:
 		var k: float = b[3] * h * 0.3
 		mesh(s, leaf_mat, b[0], b[1], b[2], g).scale = Vector3(k, k, k)
@@ -191,3 +208,83 @@ static func stretch(node: Node3D, a: Vector3, b: Vector3, radius := 1.0) -> void
 	var d := b - a
 	var length := maxf(0.001, d.length())
 	node.transform = Transform3D(Basis(Quaternion(Vector3.UP, d / length)) * Basis.from_scale(Vector3(radius, length, radius)), (a + b) * 0.5)
+
+
+static var _grass_shader: Shader
+static var _tuft: ArrayMesh
+
+## Herbe au vent (niveau « élevés » seulement) : touffes de trois brins en MultiMesh sur un rectangle `size` centré,
+## sauf dans les rectangles `exclude` (même repère). Rien n'est renvoyé aux autres niveaux de qualité.
+static func grass(size: Vector2, density: float, base: int, tip: int, exclude: Array = [], seed_ := 1) -> MultiMeshInstance3D:
+	if Config.quality < 2 or str(Config.args.get("fx", "")).contains("-grass"):
+		return null
+	if _grass_shader == null:
+		_grass_shader = load("res://gfx/shaders/grass.gdshader")
+		_tuft = _tuft_mesh()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_
+	var xfs: Array[Transform3D] = []
+	var n := int(size.x * size.y * density)
+	for i in n:
+		var p := Vector2(rng.randf_range(-size.x / 2.0, size.x / 2.0), rng.randf_range(-size.y / 2.0, size.y / 2.0))
+		var skip := false
+		for r: Rect2 in exclude:
+			if r.has_point(p):
+				skip = true
+				break
+		if skip:
+			continue
+		var s := rng.randf_range(0.7, 1.3)
+		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.8, 1.25), s)), Vector3(p.x, 0.0, p.y)))
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _tuft
+	mm.instance_count = xfs.size()
+	for i in xfs.size():
+		mm.set_instance_transform(i, xfs[i])
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	var m := ShaderMaterial.new()
+	m.shader = _grass_shader
+	m.set_shader_parameter("base", col(base))
+	m.set_shader_parameter("tip", col(tip))
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+## Touffe : trois brins effilés et un peu courbés, à 60° les uns des autres. UV.y = hauteur (0 au pied, 1 en pointe).
+static func _tuft_mesh() -> ArrayMesh:
+	var v := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var nor := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for b in 3:
+		var a := b * PI / 3.0 + 0.3
+		var dir := Vector3(cos(a), 0, sin(a))
+		var out := Vector3(-sin(a), 0, cos(a))
+		var off := dir * (0.05 * (b - 1))
+		var h := 0.22 + 0.06 * b
+		var base_i := v.size()
+		for k in 3:
+			var t := k / 2.0
+			var w := 0.05 * (1.0 - t * 0.85)
+			var bend := out * 0.06 * t * t
+			v.append(off - dir * w + Vector3(0, h * t, 0) + bend)
+			v.append(off + dir * w + Vector3(0, h * t, 0) + bend)
+			uv.append(Vector2(0, t))
+			uv.append(Vector2(1, t))
+			nor.append(Vector3.UP)
+			nor.append(Vector3.UP)
+		for k in 2:
+			var i0 := base_i + k * 2
+			idx.append_array([i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	arrays[Mesh.ARRAY_NORMAL] = nor
+	arrays[Mesh.ARRAY_TEX_UV] = uv
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m

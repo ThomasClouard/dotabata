@@ -164,6 +164,10 @@ func on_enter(c: Main, p_init: Variant) -> void:
 		g.position = ctr
 		g.rotation.y = MortarShared.plot_yaw(p, n)
 		Gfx.mesh(Shapes.rbox(s + 0.3, 0.5, s + 0.3, 0.24), grass, 0, -0.25, 0, g)
+		# herbe au vent sur le pourtour (pas dans la zone constructible)
+		var herbe := Gfx.grass(Vector2(s, s), 6.0, 0x4fb945, 0xa9ea7e, [Rect2(-4.4, -4.4, 8.8, 8.8)], p + 3)
+		if herbe:
+			g.add_child(herbe)
 		Gfx.mesh(Shapes.rbox(s, MortarShared.THICK - 0.4, s, 0.3), Gfx.mat(0xb08968, {"rough": 0.85}), 0, -0.4 - (MortarShared.THICK - 0.4) / 2.0, 0, g)
 		var rock := Gfx.rock_under(s * 0.98, 6.0, s * 0.98, 0x8a5a3c, p * 7)
 		rock.position.y = -MortarShared.THICK + 0.1
@@ -196,7 +200,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 			if k % 3 == 0:
 				Gfx.mesh(pebble, Gfx.mat(0xaab3bd, {"rough": 0.8}), x, 0.15, z, g).scale = Vector3(0.35, 0.25, 0.3)
 			else:
-				Gfx.mesh(bush, Gfx.mat(0x3fbf6f if k % 2 else 0x55d07f, {"rough": 0.8}), x, 0.25, z, g).scale = Vector3(0.5, 0.38, 0.45)
+				Gfx.mesh(bush, Gfx.foliage(0x3fbf6f if k % 2 else 0x55d07f, 0.05), x, 0.25, z, g).scale = Vector3(0.5, 0.38, 0.45)
 		if p % 2 == 0:
 			var t := Gfx.tree(2.4)
 			t.position = Vector3(-5.3, 0, 5.3)

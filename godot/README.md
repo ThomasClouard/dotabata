@@ -56,14 +56,17 @@ réglages de partie de l'hôte), `levels/parkour/` (niveaux perso, en plus de ce
 
 ## Ce que Godot apporte
 
-- ombres en cascade à pénombre progressive, occlusion ambiante, halo lumineux ;
-- reflets en espace écran : les îles et les obstacles se reflètent dans la mer et sur la glace ;
-- mer éclairée par le moteur (reflets du ciel et du soleil, vaguelettes et écume par pixel) ;
-- léger flou des lointains, façon maquette ;
-- membres des personnages déformés dans le vertex shader (plus aucun recalcul de maillage par image).
+- lumière de fin d'après-midi : soleil doré et bas (ombres longues), ombres bleutées, ciel à horizon doré ;
+- ombres en cascade à pénombre progressive, occlusion ambiante, halo lumineux, vignettage ;
+- mer éclairée par le moteur (reflets du ciel et du soleil, vaguelettes, écume, bords couleur de ciel) ;
+- nuages moelleux (dessus doré, dessous lavande), feuillage et herbe qui ondulent au vent ;
+- personnages en « vinyle » (ombre douce et chaude, vernis, contour lumineux), corps et membres déformés
+  dans le vertex shader (plus aucun recalcul de maillage par image).
 
-Ces effets demandent le moteur Forward+ et le niveau « élevés ». Le moteur Compatibilité
-garde les ombres, le halo et la mer, sans occlusion ambiante, reflets ni flou.
+L'occlusion ambiante, les ombres fines et l'herbe demandent le moteur Forward+ et le niveau « élevés ».
+Les reflets en espace écran et le flou des lointains ont été retirés : ils coûtaient près de 7 ms par image
+sur une Radeon R9 pour un effet peu visible. `--fx=-ssao,-glow,-shadows,-vignette,-grass` coupe un effet
+pour en mesurer le coût (avec `--perf`).
 
 ## Options de lancement
 

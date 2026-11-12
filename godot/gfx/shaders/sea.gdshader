@@ -1,9 +1,11 @@
 shader_type spatial;
 // Mer animée : vagues en sommets, vaguelettes et écume par pixel, reflets du ciel et du soleil par le moteur.
+// Les bords rasants prennent la couleur du ciel (Fresnel), des bandes claires suivent la houle.
 
 uniform float time_s = 0.0;
 uniform vec3 deep : source_color = vec3(0.05, 0.4, 0.55);
 uniform vec3 light : source_color = vec3(0.4, 0.8, 0.95);
+uniform vec3 sky_tint : source_color = vec3(0.75, 0.88, 1.0);
 uniform float detail = 1.0;
 
 varying vec3 wpos;
@@ -38,11 +40,16 @@ void fragment() {
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 
 	vec3 c = mix(deep, light, smoothstep(-1.2, 1.5, h));
+	// bandes claires stylisées qui suivent la houle
+	c = mix(c, light, smoothstep(0.92, 1.0, sin(h * 3.0 + p.x * 0.05)) * 0.18);
 	// écume sur les crêtes, déchiquetée par les vaguelettes
 	float foam = smoothstep(1.3, 1.65, h + ripple(p * 2.0) * 1.5 * near);
-	c = mix(c, vec3(1.0), foam * 0.75);
+	// bords rasants : la mer prend la couleur du ciel
+	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
+	c = mix(c, sky_tint, fres * 0.6);
+	c = mix(c, vec3(1.0), foam * 0.85);
 	ALBEDO = c;
-	ROUGHNESS = mix(0.14, 0.5, foam);
-	SPECULAR = 0.5;
+	ROUGHNESS = mix(0.14, 0.6, foam);
+	SPECULAR = 0.6;
 	METALLIC = 0.0;
 }

@@ -160,6 +160,7 @@ var _mouths := {}  # nom → nœud (sourire, rire, o, trait)
 var _mouth := ""
 var _glance := Vector2.ZERO  # coup d'œil aléatoire au repos
 var _glance_t := 1.0
+var _step_sign := 1.0  # pour la poussière des pas : signe de la phase de marche
 
 
 static func _statics() -> void:
@@ -815,6 +816,12 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 		_land_sq_v += (-_land_sq * 160.0 - _land_sq_v * 9.0) * dt
 		_land_sq = clampf(_land_sq + _land_sq_v * dt, -0.3, 0.25)
 		var step := pow(absf(cos(ph)), 4.0) * 0.08 * k * fl if grounded else 0.0
+		# petite bouffée de poussière à chaque appui quand on court vite
+		var ss := signf(sin(ph))
+		if ss != _step_sign:
+			_step_sign = ss
+			if grounded and k > 0.8 and Particles.current and is_inside_tree():
+				Particles.current.dust(global_position, 0.25)
 		_bsq = 1.0 - step + sin(_time * 2.4) * 0.02 * (1.0 - k) + _land_sq
 		_skin.set_shader_parameter("body_bend", _bend)
 		_skin.set_shader_parameter("body_squash", _bsq)

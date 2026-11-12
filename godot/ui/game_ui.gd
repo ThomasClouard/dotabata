@@ -191,6 +191,21 @@ func show_banner(title: String, sub: String) -> void:
 	_b_sub.text = sub
 	_b_count.text = ""
 	_banner.visible = true
+	await get_tree().process_frame
+	# le titre tombe en rebondissant, le sous-titre glisse en fondu
+	_pop(_b_title, 1.8, 0.0, 0.5)
+	_b_sub.modulate.a = 0.0
+	_b_sub.create_tween().tween_property(_b_sub, "modulate:a", 1.0, 0.4).set_delay(0.25)
+
+
+## Grossit (ou rétrécit) un texte depuis `from` jusqu'à sa taille, avec un rebond. Le pivot est le centre du texte.
+func _pop(l: Control, from: float, delay := 0.0, dur := 0.35) -> void:
+	l.pivot_offset = l.size / 2.0
+	l.scale = Vector2.ONE * from
+	l.modulate.a = 0.0
+	var tw := l.create_tween().set_parallel(true)
+	tw.tween_property(l, "scale", Vector2.ONE, dur).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "modulate:a", 1.0, dur * 0.4).set_delay(delay)
 
 
 func hide_banner() -> void:
@@ -201,8 +216,29 @@ func banner_visible() -> bool:
 	return _banner.visible
 
 
+const COUNT_COLORS := {"3": Color("#ff4d6d"), "2": Color("#ff9f1c"), "1": Color("#ffd60a")}
+
+
+## Chiffre du compte à rebours : arrive en grand et rebondit, une couleur par chiffre ; « GO ! » éclate puis s'envole.
 func set_count(text: String) -> void:
 	_b_count.text = text
+	if text == "":
+		return
+	await get_tree().process_frame  # taille du nouveau texte connue
+	if text == "GO !":
+		_b_count.rotation = 0.0
+		_b_count.add_theme_color_override("font_color", Color("#70e000"))
+		_pop(_b_count, 0.3, 0.0, 0.3)
+		var tw := _b_count.create_tween()
+		tw.tween_interval(0.35)
+		tw.tween_property(_b_count, "scale", Vector2.ONE * 1.8, 0.4).set_ease(Tween.EASE_IN)
+		tw.parallel().tween_property(_b_count, "modulate:a", 0.0, 0.4).set_ease(Tween.EASE_IN)
+	else:
+		_b_count.add_theme_color_override("font_color", COUNT_COLORS.get(text, UI.YELLOW))
+		_pop(_b_count, 2.4, 0.0, 0.4)
+		# léger balancement pendant la seconde
+		_b_count.rotation = 0.0
+		_b_count.create_tween().tween_property(_b_count, "rotation", 0.06 * (1.0 if int(text) % 2 else -1.0), 0.5).set_trans(Tween.TRANS_SINE)
 
 
 func toast(text: String, seconds := 1.8) -> void:

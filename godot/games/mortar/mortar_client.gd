@@ -102,7 +102,7 @@ func _explosion(p: Vector3, r: float, kind: String) -> void:
 	var d := p.distance_to(ctx.body.pos())
 	ctx.sfx.boom(clampf(14.0 / (d + 4.0), 0.15, 1.0) * (1.3 if kind == "mega" else 1.0))
 	if d < 14.0:
-		ctx.shake((1.0 - d / 14.0) * (1.1 if kind == "mega" else 0.7))
+		ctx.impact((1.0 - d / 14.0) * (1.0 if kind == "mega" else 0.65), Color(1.0, 0.8, 0.45))
 	# éclair : sphère qui gonfle puis disparaît, et onde de choc au sol
 	var fm := Gfx.flat(0xffe28a, {"opacity": 0.9})
 	var flash := Gfx.mesh(Shapes.sphere(1.0, 20, 14), fm, p.x, p.y, p.z, ctx.world, false)
@@ -365,6 +365,7 @@ func on_message(m: Dictionary) -> void:
 					p.hidden = true
 			if id == ctx.my_id:
 				ctx.set_active(false)
+				ctx.impact(1.0, Color(1.0, 0.35, 0.35) if by_hp else Color(0.6, 0.8, 1.0))
 				ctx.set_charging(false)
 				ctx.set_spectate(Vector3(0, 3, 0), maxf(18.0, MortarShared.plot_cz(0, n) * 1.6))
 				ctx.toast("Tu n'es plus qu'un tas d'os !" if by_hp else "Tombé dans le vide !", 3.0)

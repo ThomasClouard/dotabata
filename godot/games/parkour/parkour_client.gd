@@ -345,7 +345,7 @@ func post_step(b: Phys.Body, contacts: Array, _dt: float) -> void:
 	var now := ctx.now()
 	if ev["knocked"]:
 		ctx.sfx.hit()
-		ctx.shake(0.5)
+		ctx.impact(0.45, Color(1.0, 0.85, 0.9))
 		ctx.particles.burst(Vector3(b.px, b.py + 0.8, b.pz), 12, [0xffffff, 0xffd60a], 6.0, 0.14, 0.5)
 		if now - last_hit > 0.8:
 			last_hit = now
@@ -381,7 +381,7 @@ func _death_fx(h: int, p: Vector3, flash_screen := true) -> void:
 	var cs: Array = ParkourProps.HAZARD_FX.get(style, ParkourProps.HAZARD_FX["lava"])
 	ctx.particles.burst(p + Vector3(0, 0.4, 0), 36, cs, 8.0, 0.2, 1.1, 12.0, 1.2)
 	if flash_screen:
-		ctx.shake(0.45)
+		ctx.impact(0.5, Color(1.0, 0.6, 0.3))
 	match style:
 		"lava":
 			ctx.sfx.boom(0.35)

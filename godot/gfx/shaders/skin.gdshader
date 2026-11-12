@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_disabled;
-// Peau des personnages : efface les fragments situés dans les sphères d'impact (liseré foncé au bord)
-// et déforme les membres en tubes de Bézier directement dans le vertex shader.
+// Peau des personnages, façon jouet en vinyle : efface les fragments situés dans les sphères d'impact (liseré foncé
+// au bord), déforme les membres en tubes de Bézier et le corps (penché, écrasé) directement dans le vertex shader.
 
 uniform vec3 albedo : source_color = vec3(1.0);
 uniform vec4 hits[12];
@@ -10,10 +10,26 @@ uniform vec3 limb_a[4];
 uniform vec3 limb_c[4];
 uniform vec3 limb_e[4];
 uniform vec2 limb_r[4];
+// corps (sommets marqués UV2.x = -1) : hauteurs y0, y1, décalage du haut (courbe en t²), écrasement (1 = neutre)
+uniform vec2 body_y = vec2(0.5, 1.6);
+uniform vec2 body_bend = vec2(0.0);
+uniform float body_squash = 1.0;
 
 varying vec3 wpos;
 
 void vertex() {
+	if (UV2.x < -0.5) {
+		float h = body_y.y - body_y.x;
+		float t = clamp((VERTEX.y - body_y.x) / h, 0.0, 1.0);
+		// écrasement à volume à peu près constant : plus bas, plus large au milieu
+		float k = mix(1.0, inversesqrt(body_squash), sin(PI * t));
+		VERTEX.xz *= k;
+		VERTEX.y = body_y.x + (VERTEX.y - body_y.x) * body_squash;
+		VERTEX.xz += body_bend * (t * t);
+		// la normale suit la pente de la courbure (décalage horizontal dérivé selon y)
+		NORMAL.y -= dot(NORMAL.xz, body_bend) * 2.0 * t / h;
+		NORMAL = normalize(NORMAL);
+	}
 	int li = int(UV2.x + 0.5);
 	if (li > 0) {
 		vec3 a = limb_a[li - 1];
@@ -75,8 +91,21 @@ void fragment() {
 		col *= 0.3;
 	}
 	ALBEDO = col;
-	ROUGHNESS = 0.55;
+	ROUGHNESS = 0.35;
 	SPECULAR = 0.5;
-	RIM = 0.25;
-	RIM_TINT = 0.6;
+	// contour lumineux bleuté (lumière du ciel qui rase les bords), visible même à l'ombre
+	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	EMISSION = vec3(0.55, 0.75, 1.0) * fres * 0.22 * (FRONT_FACING ? 1.0 : 0.0) * (1.0 - edge);
+}
+
+// Éclairage « vinyle » : la lumière déborde dans l'ombre avec une teinte chaude (comme une matière un peu
+// translucide), et un reflet net de vernis.
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	float wrap = clamp((ndl + 0.5) / 1.5, 0.0, 1.0);
+	vec3 warm = mix(vec3(1.0, 0.55, 0.5), vec3(1.0), smoothstep(0.0, 0.6, wrap));
+	DIFFUSE_LIGHT += wrap * warm * ATTENUATION * LIGHT_COLOR / PI;
+	vec3 hv = normalize(VIEW + LIGHT);
+	float spec = pow(max(dot(NORMAL, hv), 0.0), 80.0) * smoothstep(0.0, 0.15, ndl);
+	SPECULAR_LIGHT += vec3(spec) * ATTENUATION * LIGHT_COLOR * 0.35;
 }

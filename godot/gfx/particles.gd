@@ -4,6 +4,8 @@ extends MultiMeshInstance3D
 
 const CAP := 700
 
+static var current: Particles = null  # celles de Main, pour les petits effets des personnages (poussière)
+
 var _pos := PackedVector3Array()
 var _vel := PackedVector3Array()
 var _life := PackedFloat32Array()
@@ -17,6 +19,7 @@ var _zero := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
 
 
 func _ready() -> void:
+	current = self
 	_pos.resize(CAP)
 	_vel.resize(CAP)
 	_life.resize(CAP)
@@ -87,3 +90,12 @@ func update(dt: float) -> void:
 		var sc := _size[i] * minf(1.0, (_life[i] / _max[i]) * 2.5)
 		var b := Basis.from_euler(Vector3(_spin[i] + _life[i] * 6.0, _spin[i] * 2.0 + _life[i] * 4.0, 0.0)).scaled(Vector3(sc, sc, sc))
 		mm.set_instance_transform(i, Transform3D(b, p))
+
+
+## Petit nuage de poussière en anneau au sol (atterrissage, dérapage).
+func dust(p: Vector3, strength := 1.0) -> void:
+	var n := int(6 + 6 * strength)
+	for i in n:
+		var a := (float(i) + randf() * 0.5) / n * TAU
+		var s := (1.6 + randf() * 1.4) * strength
+		emit(p.x + cos(a) * 0.18, p.y + 0.06, p.z + sin(a) * 0.18, cos(a) * s, 0.3 + randf() * 0.5, sin(a) * s, 0xf4efe6 if i % 2 else 0xe3d9c6, 0.16 + 0.08 * strength, 0.35 + randf() * 0.2, -0.8)

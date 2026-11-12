@@ -112,6 +112,20 @@ func apply_quality(q: int) -> void:
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if q >= 1 and forward_plus and not msaa else Viewport.SCREEN_SPACE_AA_DISABLED
 	if Config.args.has("scale"):
 		vp.scaling_3d_scale = float(Config.args["scale"])
+	# mesure du coût de chaque effet : --fx=-ssr,-dof,-ssao,-msaa,-glow,-shadows
+	var off := str(Config.args.get("fx", "")).split(",", false)
+	if off.has("-ssr"):
+		env.ssr_enabled = false
+	if off.has("-dof"):
+		_cam_attr.dof_blur_far_enabled = false
+	if off.has("-ssao"):
+		env.ssao_enabled = false
+	if off.has("-msaa"):
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+	if off.has("-glow"):
+		env.glow_enabled = false
+	if off.has("-shadows"):
+		sun.shadow_enabled = false
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(900, 900)
 	var sub: int = [60, 110, 200 if forward_plus else 140][q]

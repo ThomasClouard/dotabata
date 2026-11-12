@@ -80,7 +80,14 @@ func on_frame(dt: float) -> void:
 	var target := _face_camera()
 	if shot == "personnage":
 		target += sin(_t * 0.6) * 0.5 + _spin
+	# aperçu des animations (tests) : --vitrine=marche|course|saut, --vitrine-angle=1.57 (vue de profil)
+	var mode := str(Config.args.get("vitrine", ""))
+	if mode != "":
+		target = _face_camera() + float(Config.args.get("vitrine-angle", "0"))
+		if mode == "saut" and grounded and fmod(_t, 1.4) < dt:
+			_vy = 8.0
 	_yaw = _yaw + atan2(sin(target - _yaw), cos(target - _yaw)) * (1.0 - exp(-6.0 * dt))
 	showcase.position = SPOT + Vector3(0, _y, 0)
 	showcase.rotation.y = _yaw
-	showcase.update(dt, 0.0, _vy, grounded, false, false, shot != "personnage" and grounded)
+	var speed: float = {"marche": 3.0, "course": 7.0}.get(mode, 0.0)
+	showcase.update(dt, speed, _vy, grounded, false, false, mode == "" and shot != "personnage" and grounded)

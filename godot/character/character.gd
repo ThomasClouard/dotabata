@@ -16,46 +16,54 @@ const SPECS := {
 		"y0": 0.5, "y1": 1.62, "radii": [[0.0, 0.21], [0.3, 0.27], [0.55, 0.22], [0.82, 0.25], [1.0, 0.2]], "cap": [0.22, 0.22],
 		"eye_t": 0.8, "eye_r": 0.105,
 		"arm": {"t": 0.62, "r": 0.07, "rest": [0.5, 0.62, 0.0], "reach": 0.8}, "leg": {"x": 0.12, "r": 0.07, "foot": 0.13, "stride": 1.0},
+		"floppy": 1.0,
 	},
 	"casquette": {
 		"y0": 0.42, "y1": 1.5, "radii": [[0.0, 0.3], [1.0, 0.3]], "cap": [0.3, 0.3],
 		"eye_t": 0.66, "eye_r": 0.115,
 		"arm": {"t": 0.5, "r": 0.085, "rest": [0.52, 0.55, 0.0], "reach": 0.7}, "leg": {"x": 0.14, "r": 0.085, "foot": 0.15, "stride": 1.0},
 		"acc": "casquette", "acc_y": 1.2, "acc_dead": [0.5, 0.12, -1.2],
+		"floppy": 0.9,
 	},
 	"spaghetti": {
 		"y0": 0.56, "y1": 1.72, "radii": [[0.0, 0.19], [0.4, 0.21], [1.0, 0.24]], "cap": [0.2, 0.24],
 		"eye_t": 0.84, "eye_r": 0.1,
 		"arm": {"t": 0.55, "r": 0.06, "rest": [0.55, 0.6, 0.0], "reach": 0.9}, "leg": {"x": 0.1, "r": 0.06, "foot": 0.12, "stride": 1.15},
+		"floppy": 1.5,
 	},
 	"hélice": {
 		"y0": 0.3, "y1": 1.14, "radii": [[0.0, 0.42], [1.0, 0.42]], "cap": [0.42, 0.42],
 		"eye_t": 0.68, "eye_r": 0.11,
 		"arm": {"t": 0.55, "r": 0.1, "rest": [0.6, 0.5, 0.0], "reach": 0.5}, "leg": {"x": 0.17, "r": 0.09, "foot": 0.14, "stride": 0.8},
 		"acc": "hélice", "acc_y": 0.72, "acc_dead": [0.3, 0.1, -1.2],
+		"floppy": 0.8,
 	},
 	"bouée": {
 		"y0": 0.42, "y1": 1.5, "radii": [[0.0, 0.25], [1.0, 0.27]], "cap": [0.25, 0.27],
 		"eye_t": 0.78, "eye_r": 0.1,
 		"arm": {"t": 0.6, "r": 0.085, "rest": [0.62, 0.98, 0.05], "reach": 0.55}, "leg": {"x": 0.13, "r": 0.085, "foot": 0.14, "stride": 1.0},
 		"acc": "bouée", "acc_y": 0.78, "acc_dead": [0.0, 0.12, 0.0],
+		"floppy": 1.0,
 	},
 	"crochet": {
 		"y0": 0.5, "y1": 1.72, "radii": [[0.0, 0.18], [0.5, 0.17], [0.8, 0.2], [1.0, 0.2]], "cap": [0.18, 0.2],
 		"eye_t": 0.86, "eye_r": 0.1,
 		"arm": {"t": 0.5, "r": 0.065, "rest": [0.5, 0.55, 0.0], "reach": 0.95}, "leg": {"x": 0.1, "r": 0.065, "foot": 0.12, "stride": 1.2},
+		"floppy": 1.3,
 	},
 	"bandeau": {
 		"y0": 0.3, "y1": 1.14, "radii": [[0.0, 0.42], [1.0, 0.42]], "cap": [0.42, 0.42],
 		"eye_t": 0.62, "eye_r": 0.105,
 		"arm": {"t": 0.55, "r": 0.1, "rest": [0.6, 0.5, 0.0], "reach": 0.5}, "leg": {"x": 0.17, "r": 0.09, "foot": 0.14, "stride": 0.8},
 		"acc": "bandeau", "acc_y": 0.72, "acc_dead": [0.0, -0.15, 0.0],
+		"floppy": 0.8,
 	},
 	"arche": {
 		"y0": 0.5, "y1": 1.08, "radii": [[0.0, 0.28], [1.0, 0.3]], "cap": [0.28, 0.3],
 		"eye_t": 0.55, "eye_r": 0.1,
 		"arm": {"t": 0.75, "r": 0.13, "rest": [0.62, 0.09, 0.12], "reach": 1.15, "lift": 0.5}, "leg": {"x": 0.13, "r": 0.09, "foot": 0.13, "stride": 0.7},
 		"arms_walk": true,
+		"floppy": 0.6,
 	},
 }
 
@@ -85,6 +93,11 @@ static var _sph_mesh: Mesh
 static var _skin_sph: Mesh
 static var _box_mesh: Mesh
 static var _tubes_mesh: ArrayMesh
+static var _glint_mat: StandardMaterial3D
+static var _blush_mat: StandardMaterial3D
+static var _tongue_mat: StandardMaterial3D
+static var _lid_mesh: Mesh
+static var _bowl_mesh: Mesh
 
 var dead := false
 var hanging := false  # suspendu à une tyrolienne : bras tendus vers le câble, jambes ballantes
@@ -99,6 +112,7 @@ var _eyes: Node3D
 var _pupils: Array[MeshInstance3D] = []
 var _propeller: Node3D
 var _skin := ShaderMaterial.new()
+var _lid_mat := StandardMaterial3D.new()  # paupières, couleur de peau (sans le revers assombri du shader de peau)
 var _skin_meshes: Array[Node3D] = []
 var _limbs: Array[Limb] = []
 var _hits: Array = []  # { p: Vector3, r: float, cur: float }
@@ -130,6 +144,22 @@ var _pile_y := 0.0
 var _pile_rx := 0.0
 var _pile_rz := 0.0
 var _ragdoll: Array[RigidBody3D] = []  # os simulés par Jolt après la mort (effets physiques activés)
+# —— corps mou ——
+var _floppy := 1.0  # personnalité : plus c'est grand, plus le corps et les bras ballottent
+var _bend := Vector2.ZERO  # décalage du haut du corps (x, z locaux), ressort peu amorti
+var _bend_v := Vector2.ZERO
+var _bsq := 1.0  # écrasement du corps (1 = neutre)
+var _land_sq := 0.0  # écrasement d'atterrissage, qui revient en ressort
+var _land_sq_v := 0.0
+# —— visage ——
+var _face := Node3D.new()  # bouche et joues (suivent le corps comme les yeux)
+var _face_c := Vector3.ZERO  # point d'ancrage du visage
+var _lids: Array[MeshInstance3D] = []
+var _lid := -1.1  # paupières : -1.1 ouvertes, 0 mi-closes, 1.57 fermées
+var _mouths := {}  # nom → nœud (sourire, rire, o, trait)
+var _mouth := ""
+var _glance := Vector2.ZERO  # coup d'œil aléatoire au repos
+var _glance_t := 1.0
 
 
 static func _statics() -> void:
@@ -144,6 +174,11 @@ static func _statics() -> void:
 	_skin_sph = Shapes.sphere_part(1.0, 20, 12, 0.0, TAU, 0.0, PI, true)
 	_box_mesh = Shapes.box()
 	_tubes_mesh = _build_tubes()
+	_glint_mat = Gfx.flat(0xffffff)
+	_blush_mat = Gfx.mat(0xff2f6a, {"opacity": 0.55, "rough": 0.7})
+	_tongue_mat = Gfx.mat(0xff6b81, {"rough": 0.5})
+	_lid_mesh = Shapes.sphere_part(1.2, 20, 8, 0.0, TAU, 0.0, PI / 2.0)
+	_bowl_mesh = Shapes.sphere_part(1.0, 18, 6, 0.0, TAU, PI / 2.0, PI / 2.0)
 
 
 ## Les quatre membres dans un seul maillage : UV = (numéro d'anneau, angle), UV2.x = numéro du membre (1..4).
@@ -255,7 +290,42 @@ func _body_mesh() -> ArrayMesh:
 	for j in m_seg:
 		nor[j] = Vector3.DOWN
 		nor[n_rings * m_seg + j] = Vector3.UP
-	return Shapes.build(pos, nor, PackedVector2Array(), idx, Transform3D.IDENTITY, true)
+	# UV2.x = -1 : sommets du corps, que le shader penche et écrase (voir _deform)
+	var m := Shapes.build(pos, nor, PackedVector2Array(), idx, Transform3D.IDENTITY, true)
+	var arrays := m.surface_get_arrays(0)
+	var uv2 := PackedVector2Array()
+	uv2.resize(pos.size())
+	uv2.fill(Vector2(-1, 0))
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2
+	var out := ArrayMesh.new()
+	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return out
+
+
+## Même déformation que le shader de peau (corps penché de _bend, écrasé de _bsq), pour un point du repère du
+## personnage : les yeux, la bouche, le chapeau et les épaules suivent ainsi le corps.
+func _deform(p: Vector3) -> Vector3:
+	var y0: float = _sp["y0"]
+	if p.y < y0:
+		return p
+	var h: float = _sp["y1"] - y0
+	var t := minf(1.0, (p.y - y0) / h)
+	var k := lerpf(1.0, 1.0 / sqrt(_bsq), sin(PI * t))
+	return Vector3(p.x * k + _bend.x * t * t, y0 + (p.y - y0) * _bsq, p.z * k + _bend.y * t * t)
+
+
+## Inclinaison du corps à la hauteur y (pente de la courbure).
+func _tilt_at(y: float) -> Basis:
+	var h: float = _sp["y1"] - _sp["y0"]
+	var t := clampf((y - _sp["y0"]) / h, 0.0, 1.0)
+	var slope := _bend * (2.0 * t / h)
+	return Basis.from_euler(Vector3(atan(slope.y), 0.0, -atan(slope.x)))
+
+
+## Nœud placé à l'origine du personnage dont le contenu est autour de `c` : il suit le corps comme s'il pivotait en `c`.
+func _follow_around(c: Vector3) -> Transform3D:
+	var b := _tilt_at(c.y)
+	return Transform3D(b, _deform(c) - b * c)
 
 
 func _init(color: int, kind: String) -> void:
@@ -277,6 +347,8 @@ func _init(color: int, kind: String) -> void:
 ## Change la couleur et, si besoin, reconstruit le personnage avec un autre modèle.
 func set_look(color: int, kind: String) -> void:
 	_skin.set_shader_parameter("albedo", Gfx.col(color))
+	_lid_mat.albedo_color = Gfx.col(color)
+	_lid_mat.roughness = 0.35
 	if not SPECS.has(kind):
 		kind = "haricot"
 	if kind == _kind:
@@ -291,7 +363,15 @@ func set_look(color: int, kind: String) -> void:
 	_skin_meshes.clear()
 	_limbs.clear()
 	_pupils.clear()
+	_lids.clear()
+	_mouths.clear()
+	_mouth = ""
 	_propeller = null
+	_floppy = sp.get("floppy", 1.0)
+	_bend = Vector2.ZERO
+	_bend_v = Vector2.ZERO
+	_bsq = 1.0
+	_skin.set_shader_parameter("body_y", Vector2(sp["y0"], sp["y1"]))
 	_eye_y = sp["y0"] + sp["eye_t"] * (sp["y1"] - sp["y0"])
 	_shoulder_y = sp["y0"] + sp["arm"]["t"] * (sp["y1"] - sp["y0"])
 
@@ -307,8 +387,11 @@ func set_look(color: int, kind: String) -> void:
 	_content.add_child(_limb_bones)
 	_limb_bones.visible = false
 	_eyes = Node3D.new()
+	_face = Node3D.new()
 	_build_eyes()
+	_build_face()
 	_content.add_child(_eyes)
+	_content.add_child(_face)
 	_hat = Node3D.new()
 	_content.add_child(_hat)
 	_hat.position = Vector3(0, sp.get("acc_y", 0.0), 0)
@@ -406,6 +489,62 @@ func _build_eyes() -> void:
 		var eye := _add(_eyes, _sph_mesh, _white_mat, s * x, _eye_y, z, er)
 		var pupil := _add(eye, _sph_mesh, _dark_mat, 0, 0, 0.66, 0.5)
 		_pupils.append(pupil)
+		# reflet brillant, en haut à gauche de la pupille
+		var glint := _add(pupil, _sph_mesh, _glint_mat, -0.36, 0.38, 0.78, 0.26)
+		glint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# paupière : calotte couleur de peau qui bascule devant l'œil (rotation x : -1.2 ouverte, 1.57 fermée)
+		var lid := Gfx.mesh(_lid_mesh, _lid_mat, 0, 0, 0, eye)
+		lid.rotation.x = _lid
+		_lids.append(lid)
+
+
+## Bouche (quatre formes, une seule visible) et joues roses, posées sur la surface du corps sous les yeux.
+func _build_face() -> void:
+	var er: float = _sp["eye_r"]
+	var my := _eye_y - er * 2.0
+	var surf := _radius_at(my)
+	var mz := _lean_at(my) + surf - er * 0.06
+	_face_c = Vector3(0, my, _lean_at(my))
+	var m := er * 0.95
+	var smile := Gfx.mesh(Shapes.torus_arc(m, m * 0.15, 6, 14, PI * 0.75, Transform3D(Basis(Vector3.BACK, -PI / 2.0 - PI * 0.375), Vector3(0, m * 0.7, 0))), _dark_mat, 0, my, mz, _face, false)
+	var laugh := Node3D.new()
+	laugh.position = Vector3(0, my + m * 0.15, mz)
+	_face.add_child(laugh)
+	_add(laugh, _bowl_mesh, _dark_mat, 0, 0, 0, m * 1.05, m * 1.05, m * 0.35)
+	_add(laugh, _sph_mesh, _tongue_mat, 0, -m * 0.62, m * 0.12, m * 0.42, m * 0.22, m * 0.2)
+	var o := _add(_face, _sph_mesh, _dark_mat, 0, my, mz, m * 0.42, m * 0.55, m * 0.2)
+	var line := _add(_face, _box_mesh, _dark_mat, 0, my + m * 0.1, mz, m * 1.1, m * 0.17, m * 0.12)
+	_mouths = {"sourire": smile, "rire": laugh, "o": o, "trait": line}
+	for k: String in _mouths:
+		_mouths[k].visible = false
+		_mouths[k].set_meta("s", _mouths[k].scale)
+	_set_mouth("sourire")
+	# joues roses
+	var cr := er * 0.62
+	var cy := my + er * 0.55
+	var cs := _radius_at(cy)
+	for s in [-1.0, 1.0]:
+		var cx: float = s * minf(cs * 0.8, er * 1.9)
+		var cz := _lean_at(cy) + sqrt(maxf(0.0, cs * cs - cx * cx)) - cr * 0.12
+		var cheek := _add(_face, _sph_mesh, _blush_mat, cx, cy, cz, cr, cr * 0.6, cr * 0.28)
+		cheek.rotation.y = asin(clampf(cx / maxf(cs, 0.01), -1.0, 1.0))
+		cheek.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _set_mouth(k: String) -> void:
+	if k == _mouth or not _mouths.has(k):
+		return
+	if _mouths.has(_mouth):
+		_mouths[_mouth].visible = false
+	_mouth = k
+	var n: Node3D = _mouths[k]
+	n.visible = true
+	# petit « pop » au changement d'expression
+	var base: Vector3 = n.get_meta("s")
+	n.scale = base
+	if n.is_inside_tree():
+		n.scale = base * 0.6
+		n.create_tween().tween_property(n, "scale", base, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _build_accessory() -> void:
@@ -499,6 +638,14 @@ func die() -> void:
 	for m in _skin_meshes:
 		m.visible = false
 	_eyes.visible = false
+	_face.visible = false
+	_bend = Vector2.ZERO
+	_bend_v = Vector2.ZERO
+	_bsq = 1.0
+	_land_sq = 0.0
+	_skin.set_shader_parameter("body_bend", Vector2.ZERO)
+	_skin.set_shader_parameter("body_squash", 1.0)
+	_eyes.transform = Transform3D.IDENTITY
 	_bones.visible = true
 	_limb_bones.visible = true
 	for l in _limbs:
@@ -574,6 +721,7 @@ func _revive() -> void:
 	for m in _skin_meshes:
 		m.visible = true
 	_eyes.visible = true
+	_face.visible = true
 	_bones.position = Vector3.ZERO
 	_bones.rotation = Vector3.ZERO
 	_hat.position = Vector3(0, _sp.get("acc_y", 0.0), 0)
@@ -622,10 +770,13 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 	var ph := _phase
 
 	# étirement / écrasement
-	if grounded and not _was_grounded:
-		_sq_v -= minf(5.0, 1.5 + absf(_last_vy) * 0.3)
+	if grounded and not _was_grounded and not dead:
+		_sq_v -= minf(3.5, 1.0 + absf(_last_vy) * 0.2)
+		_land_sq_v -= minf(4.0, 0.8 + absf(_last_vy) * 0.25)  # le corps s'écrase en flan, puis ballotte
+		if absf(_last_vy) > 6.0 and Particles.current and is_inside_tree():
+			Particles.current.dust(global_position, clampf(absf(_last_vy) / 14.0, 0.5, 1.3))
 	if not grounded and _was_grounded and vy > 1.0:
-		_sq_v += 3.5
+		_sq_v += 4.2  # étirement au décollage
 	_was_grounded = grounded
 	_last_vy = vy
 	_sq_v += ((1.0 - _sq) * 220.0 - _sq_v * 13.0) * dt
@@ -644,11 +795,37 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 		_update_dead(dt)
 	else:
 		var dn := 1.0 if dance else 0.0
+		var fl := _floppy
+		var hgt: float = sp["y1"] - sp["y0"]
 		var bob := absf(sin(ph)) * 0.07 * k if grounded else 0.0
 		_pivot.position.y = CENTER + bob + dn * absf(sin(_time * 7.0)) * 0.12
-		_pivot.rotation = Vector3(k * 0.2 + _spin, 0, sin(ph) * 0.14 * k + dn * sin(_time * 7.0) * 0.2)
-		_hat.rotation.x = sin(ph * 2.0) * 0.06 * k - clampf(az * 0.003, -0.2, 0.2)
-		_hat.rotation.z = clampf(ax * 0.003, -0.2, 0.2)
+		_pivot.rotation = Vector3(k * 0.16 + _spin, 0, sin(ph) * 0.12 * k + dn * sin(_time * 7.0) * 0.2)
+		var hat_rot := Vector3(sin(ph * 2.0) * 0.06 * k - clampf(az * 0.003, -0.2, 0.2), 0.0, clampf(ax * 0.003, -0.2, 0.2))
+
+		# corps mou : le haut traîne derrière les accélérations, se penche en courant, se dandine à chaque pas,
+		# puis ballotte en ressort peu amorti
+		var bt := Vector2(-ax, -az) * 0.0045 * hgt * fl
+		bt.y += k * 0.07 * hgt
+		if grounded:
+			bt.x -= sin(ph) * 0.07 * k * fl * hgt
+		bt.x += sin(_time * 1.1) * 0.015 * hgt * (1.0 - k) + dn * sin(_time * 7.0) * 0.12 * hgt
+		_bend_v += ((bt - _bend) * (55.0 / fl) - _bend_v * (4.0 + 2.0 / fl)) * dt
+		_bend = (_bend + _bend_v * dt).limit_length(0.4 * hgt)
+		# écrasement : petit tassement à chaque appui, respiration au repos, ressort d'atterrissage
+		_land_sq_v += (-_land_sq * 160.0 - _land_sq_v * 9.0) * dt
+		_land_sq = clampf(_land_sq + _land_sq_v * dt, -0.3, 0.25)
+		var step := pow(absf(cos(ph)), 4.0) * 0.08 * k * fl if grounded else 0.0
+		_bsq = 1.0 - step + sin(_time * 2.4) * 0.02 * (1.0 - k) + _land_sq
+		_skin.set_shader_parameter("body_bend", _bend)
+		_skin.set_shader_parameter("body_squash", _bsq)
+		var eye_c := Vector3(0, _eye_y, _lean_at(_eye_y))
+		_eyes.transform = _follow_around(eye_c)
+		_face.transform = _follow_around(_face_c)
+		var hat_y: float = sp.get("acc_y", 0.0)
+		var hat_c := Vector3(0, hat_y, _lean_at(hat_y))
+		_hat.transform = Transform3D(_tilt_at(hat_y) * Basis.from_euler(hat_rot), Vector3(0, hat_y, 0) + _deform(hat_c) - hat_c)
+		for l in _limbs:
+			l.anchor = _deform(l.anchor0)
 
 		var leg: Dictionary = sp["leg"]
 		var arm: Dictionary = sp["arm"]
@@ -669,10 +846,12 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 				elif tumble:
 					target = Vector3(s * 0.3, 0.3 + sin(_time * 15.0 + s) * 0.2, cos(_time * 13.0 + s) * 0.3)
 				elif grounded:
-					target = Vector3(s * lx, fy + maxf(0.0, sin(lp)) * 0.32 * k * sd + dn * maxf(0.0, sin(_time * 7.0 + s)) * 0.2, -cos(lp) * 0.44 * k * sd)
+					var lift := maxf(0.0, sin(lp))
+					# pied qui se lève en s'écartant un peu (dandinement), et qui traîne derrière le corps
+					target = Vector3(s * (lx + lift * 0.05 * k * fl), fy + lift * 0.32 * k * sd + dn * maxf(0.0, sin(_time * 7.0 + s)) * 0.2, -cos(lp) * 0.44 * k * sd)
 				else:
 					target = Vector3(s * (lx + 0.05), fy + 0.13 + sin(_time * 13.0 + s * 2.0) * 0.09, -0.1 + s * 0.14 * sin(_time * 9.0))
-				l.pos = l.pos.lerp(target, 1.0 - exp(-28.0 * dt))
+				l.pos = l.pos.lerp(target, 1.0 - exp(-(22.0 / fl) * dt))
 			else:
 				if hanging:
 					target = Vector3(s * 0.14, sy + 1.2, 0.0)  # mains au câble
@@ -683,35 +862,67 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 				elif charging:
 					target = Vector3(s * 0.2, sy - 0.05, 0.5)
 				elif not grounded and vy < -3.0:
-					target = Vector3(s * 0.62, sy + 0.5, 0)  # bras en l'air en tombant
+					# chute : les bras moulinent
+					var w := _time * 16.0 + s * 1.6
+					target = Vector3(s * 0.58, sy + 0.35 + sin(w) * 0.35, cos(w) * 0.35)
 				elif not grounded:
 					target = Vector3(s * 0.72, sy - 0.05, 0)
 				elif arms_walk:
 					target = Vector3(s * rest[0], rest[1] + maxf(0.0, -sin(lp)) * 0.25 * k, rest[2] + cos(lp) * 0.4 * k)  # mains qui marchent
 				else:
-					target = Vector3(s * rest[0], rest[1], rest[2] + cos(lp) * 0.34 * k)
-				# ressort sous-amorti : les bras traînent et rebondissent avec l'inertie
-				var a := (target - l.pos) * 110.0
-				a.x -= l.vel.x * 8.0 + ax * 0.55
-				a.y -= l.vel.y * 8.0 + ay * 0.3
-				a.z -= l.vel.z * 8.0 + az * 0.55
+					target = Vector3(s * (rest[0] + 0.06 * k), rest[1] + absf(cos(lp)) * 0.06 * k, rest[2] + cos(lp) * 0.42 * k)
+				# ressort sous-amorti : les bras traînent, flottent et rebondissent avec l'inertie
+				var a := (target - l.pos) * (70.0 / fl)
+				a.x -= l.vel.x * 5.5 + ax * 0.6
+				a.y -= l.vel.y * 5.5 + ay * 0.35
+				a.z -= l.vel.z * 5.5 + az * 0.6
 				l.vel += a * dt
 				l.pos += l.vel * dt
 				var d := l.pos - l.anchor
 				if d.length() > reach:
 					l.pos = l.anchor + d.normalized() * reach
 
-		# yeux : clignement, pupilles qui ballottent, tournis pendant le roulé-boulé
+		# expression : bouche selon l'état, paupières (clignement, regard concentré), pupilles qui ballottent,
+		# regardent la caméra ou jettent un coup d'œil autour au repos, tournis pendant le roulé-boulé
+		if tumble or (not grounded and vy < -4.0):
+			_set_mouth("o")
+		elif dance:
+			_set_mouth("rire")
+		elif charging:
+			_set_mouth("trait")
+		else:
+			_set_mouth("sourire")
 		_blink -= dt
 		if _blink < -0.12:
 			_blink = 1.5 + randf() * 4.0
-		_eyes.scale.y = 0.15 if _blink < 0.0 else 1.0
-		_eyes.position.y = _eye_y * 0.85 if _blink < 0.0 else 0.0
+		var lid_target := -1.45
+		if _blink < 0.0:
+			lid_target = 1.57
+		elif charging:
+			lid_target = -0.35
+		elif k > 0.85:
+			lid_target = -1.05
+		_lid += (lid_target - _lid) * minf(1.0, dt * 28.0)
+		for lid in _lids:
+			lid.rotation.x = _lid
+		_glance_t -= dt
+		if _glance_t < 0.0:
+			_glance_t = 1.5 + randf() * 2.5
+			_glance = Vector2.ZERO if randf() < 0.4 else Vector2(randf_range(-0.32, 0.32), randf_range(-0.15, 0.2))
+		var look := _glance
+		if k < 0.3 and _glance == Vector2.ZERO and is_inside_tree():
+			var cam := get_viewport().get_camera_3d()
+			if cam:
+				var to_cam := _eyes.global_transform.affine_inverse() * cam.global_position - eye_c
+				if to_cam.z > 0.2:
+					to_cam = to_cam.normalized()
+					look = Vector2(to_cam.x, to_cam.y) * 0.45
 		for i in _pupils.size():
 			if tumble:
 				_pupils[i].position = Vector3(cos(_time * 20.0 + i * 2.0) * 0.4, sin(_time * 20.0 + i * 2.0) * 0.4, 0.55)
 			else:
-				_pupils[i].position = Vector3(clampf(-ax * 0.008, -0.35, 0.35) + 0.1 + sin(_time * 0.7) * 0.1, 0.08 + clampf(-ay * 0.006, -0.35, 0.35), 0.66)
+				var want := Vector3(clampf(-ax * 0.008 + look.x, -0.38, 0.38), clampf(0.06 - ay * 0.006 + look.y, -0.35, 0.35), 0.66)
+				_pupils[i].position = _pupils[i].position.lerp(want, 1.0 - exp(-14.0 * dt))
 	if _propeller:
 		_propeller.rotation.y += dt * (6.0 + speed * 4.0)
 
@@ -749,7 +960,10 @@ func _pose_limbs() -> void:
 		var mid := (l.anchor + l.pos) * 0.5
 		if not dead:
 			if l.leg:
-				mid.z += 0.12
+				# genou souple : il avance quand le pied se lève, et part un peu de côté (jambes en caoutchouc)
+				var up := clampf((l.pos.y - _sp["leg"]["foot"] * 0.55) / 0.3, 0.0, 1.0)
+				mid.z += 0.08 + up * 0.16
+				mid.x += l.side * (0.02 + up * 0.04) * _floppy
 			else:
 				mid.x += l.side * 0.13
 				mid.y += lift

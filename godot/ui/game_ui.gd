@@ -245,15 +245,18 @@ func toast(text: String, seconds := 1.8) -> void:
 	_toast.text = text
 	if _toast_tween:
 		_toast_tween.kill()
-	_toast.modulate.a = 1.0
+	_toast.modulate.a = 0.0
+	_toast.offset_top = 40
 	_toast_tween = create_tween()
+	_toast_tween.tween_property(_toast, "offset_top", 74.0, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_toast_tween.parallel().tween_property(_toast, "modulate:a", 1.0, 0.15)
 	_toast_tween.tween_interval(seconds)
 	_toast_tween.tween_property(_toast, "modulate:a", 0.0, 0.25)
 
 
 # ---------- voile central ----------
 
-func _fill_overlay(children: Array, width := 440.0) -> void:
+func _fill_overlay(children: Array, width := 440.0) -> VBoxContainer:
 	_tab = ""  # la carte centrale ne montre plus les réglages de la partie
 	_overlay_card.custom_minimum_size.x = width
 	for c in _overlay_card.get_children():
@@ -265,6 +268,8 @@ func _fill_overlay(children: Array, width := 440.0) -> void:
 		v.add_child(c)
 	_overlay_card.add_child(v)
 	overlay.visible = true
+	UI.pop_in(_overlay_card, 0.0, 0.85, 0.3)
+	return v
 
 
 func hide_overlay() -> void:
@@ -407,12 +412,14 @@ func show_scores(m: Dictionary, players: Array, my_id: String, game_name: String
 		var pts := UI.label("+%d" % int(r["points"]) if r else "", 15, UI.ACCENT2)
 		pts.custom_minimum_size.x = 40
 		pts.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		var tot := UI.label(str(int(rows[i][1])), 17)
+		var tot := UI.label("", 17)
+		UI.count_up(tot, int(rows[i][1]) - (int(r["points"]) if r else 0), int(rows[i][1]), 0.35 + i * 0.07, 0.6)
 		tot.custom_minimum_size.x = 40
 		tot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		kids.append(_table_row([_rank_label(i), UI.dot(Gfx.col(int(p["color"]))), name_l, res_l, pts, tot], id == my_id))
 	kids.append(UI.small("Direction le podium…" if m["last"] else "Prochaine manche dans quelques secondes…"))
-	_fill_overlay(kids)
+	# les lignes arrivent l'une après l'autre
+	UI.stagger(_fill_overlay(kids), 0.07, 0.15)
 
 
 ## Classement final ; renvoie les identifiants dans l'ordre du podium.
@@ -437,6 +444,9 @@ func show_podium(totals: Dictionary, players: Array, my_id: String, host: bool) 
 	if host:
 		v.add_child(UI.button("Retour au lobby", "big", func() -> void: to_lobby_pressed.emit()))
 	side.add_child(v)
+	UI.pop_in(top, 0.2, 0.4, 0.45)
+	UI.pop_in(side, 0.4, 0.8)
+	UI.stagger(v, 0.08, 0.6)
 
 
 # ---------- lobby ----------

@@ -143,7 +143,7 @@ Principes réseau, pensés pour le LAN :
 - **Le serveur fait autorité sur les règles** : phases, chronos, checkpoints, arrivées, obus, destruction des blocs, dégâts, scores. Il simule aussi les bots.
 - **Les obstacles sont déterministes** : leur position est une fonction pure de l'horloge serveur synchronisée, donc rien à synchroniser.
 
-Le rendu est entièrement procédural (aucune texture ni modèle à charger). Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
+Le rendu est entièrement procédural (aucune texture ni modèle à charger ; seule la police Fredoka, sous licence OFL, est livrée dans `godot/ui/fonts/`). Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
 
 ## Ajouter un mini-jeu
 

@@ -25,9 +25,21 @@ static func sbox(bg: Color, radius := 12, pad_x := 14, pad_y := 8) -> StyleBoxFl
 	return s
 
 
+## Bouton « en relief » : un rebord plus foncé dessous, qui disparaît quand on appuie (le bouton s'enfonce).
+static func relief(bg: Color, radius := 14, pad_x := 14, pad_y := 8, pressed := false) -> StyleBoxFlat:
+	var s := sbox(bg, radius, pad_x, pad_y)
+	s.border_color = bg.darkened(0.28)
+	s.border_width_bottom = 1 if pressed else 5
+	s.content_margin_top += 4 if pressed else 0
+	s.shadow_color = Color(INK.r, INK.g, INK.b, 0.18 if not pressed else 0.1)
+	s.shadow_size = 6 if not pressed else 2
+	s.shadow_offset = Vector2(0, 4 if not pressed else 1)
+	return s
+
+
 static func _shadow(s: StyleBoxFlat, dy: float, alpha: float) -> StyleBoxFlat:
 	s.shadow_color = Color(INK.r, INK.g, INK.b, alpha)
-	s.shadow_size = 1
+	s.shadow_size = int(dy * 2.0)
 	s.shadow_offset = Vector2(0, dy)
 	return s
 
@@ -35,9 +47,16 @@ static func _shadow(s: StyleBoxFlat, dy: float, alpha: float) -> StyleBoxFlat:
 static func init_theme() -> void:
 	if theme:
 		return
-	var f := SystemFont.new()
-	f.font_names = PackedStringArray(["Trebuchet MS", "Segoe UI", "Verdana", "sans-serif"])
-	f.font_weight = 700
+	# Fredoka (ronde et grasse, licence OFL : ui/fonts/OFL.txt), épaisseur 600 ; les caractères qu'elle n'a pas
+	# (japonais du logo, symboles) viennent des polices du système
+	var sys := SystemFont.new()
+	sys.font_names = PackedStringArray(["Segoe UI", "Yu Gothic UI", "Meiryo", "Trebuchet MS", "sans-serif"])
+	sys.font_weight = 700
+	var ff: FontFile = load("res://ui/fonts/Fredoka.ttf")
+	ff.fallbacks = [sys]
+	var f := FontVariation.new()
+	f.base_font = ff
+	f.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 600}
 	font = f
 	Gfx.font = f
 	var t := Theme.new()
@@ -46,13 +65,12 @@ static func init_theme() -> void:
 
 	t.set_color("font_color", "Label", INK)
 	t.set_color("default_color", "RichTextLabel", INK)
-	t.set_stylebox("panel", "PanelContainer", _shadow(sbox(CARD, 18, 18, 16), 8, 0.18))
+	t.set_stylebox("panel", "PanelContainer", _shadow(sbox(CARD, 22, 18, 16), 7, 0.16))
 
-	var normal := _shadow(sbox(YELLOW), 4, 0.25)
-	var hover := _shadow(sbox(YELLOW.lightened(0.25)), 4, 0.25)
-	var pressed := _shadow(sbox(YELLOW.darkened(0.06)), 1, 0.25)
-	pressed.content_margin_top += 3
-	pressed.content_margin_bottom -= 3
+	var normal := relief(YELLOW)
+	var hover := relief(YELLOW.lightened(0.22))
+	hover.border_color = YELLOW.darkened(0.28)
+	var pressed := relief(YELLOW.darkened(0.04), 14, 14, 8, true)
 	var disabled := sbox(Color("#e6e3ee"))
 	t.set_stylebox("normal", "Button", normal)
 	t.set_stylebox("hover", "Button", hover)
@@ -118,8 +136,8 @@ static func init_theme() -> void:
 	t.set_icon("unchecked_disabled", "CheckBox", box_off)
 	t.set_icon("checked_disabled", "CheckBox", box_on)
 
-	t.set_stylebox("background", "ProgressBar", sbox(Color("#dddddd"), 6, 0, 0))
-	t.set_stylebox("fill", "ProgressBar", sbox(Color("#70e000"), 6, 0, 0))
+	t.set_stylebox("background", "ProgressBar", sbox(Color(INK.r, INK.g, INK.b, 0.14), 8, 0, 0))
+	t.set_stylebox("fill", "ProgressBar", sbox(Color("#70e000"), 8, 0, 0))
 	theme = t
 
 
@@ -205,20 +223,19 @@ static func button(text: String, kind := "", on_press: Callable = Callable()) ->
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	squash_on_press(b)
 	if kind == "small":
 		for st in ["normal", "hover", "pressed", "disabled"]:
 			var s: StyleBoxFlat = theme.get_stylebox(st, "Button").duplicate()
 			s.content_margin_left = 10
 			s.content_margin_right = 10
-			s.content_margin_top = 3 if st != "pressed" else 6
-			s.content_margin_bottom = 3 if st != "pressed" else 0
+			s.content_margin_top = 3 if st != "pressed" else 7
+			s.content_margin_bottom = 3
 			b.add_theme_stylebox_override(st, s)
 	elif kind == "big":
 		for st in ["normal", "hover", "pressed"]:
-			var s: StyleBoxFlat = theme.get_stylebox(st, "Button").duplicate()
-			s.bg_color = ACCENT if st != "hover" else ACCENT.lightened(0.15)
-			s.content_margin_top = 12 if st != "pressed" else 15
-			s.content_margin_bottom = 12 if st != "pressed" else 9
+			var s := relief(ACCENT.lightened(0.12) if st == "hover" else ACCENT, 16, 14, 12, st == "pressed")
+			s.border_color = ACCENT.darkened(0.3)
 			b.add_theme_stylebox_override(st, s)
 		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
 			b.add_theme_color_override(c, Color.WHITE)
@@ -243,13 +260,10 @@ static func menu_button(text: String, on_press: Callable = Callable(), accent :=
 		if st == "focus":
 			s = focus_ring(16)
 		else:
-			s.bg_color = base.lightened(0.18) if st == "hover" else (base.darkened(0.06) if st == "pressed" else base)
-			s.set_corner_radius_all(16)
-			s.content_margin_left = 26
-			s.content_margin_right = 26
-			s.content_margin_top = 13 if st != "pressed" else 16
-			s.content_margin_bottom = 13 if st != "pressed" else 10
-			s.shadow_offset = Vector2(0, 6 if st != "pressed" else 2)
+			s = relief(base.lightened(0.18) if st == "hover" else base, 18, 26, 12, st == "pressed")
+			s.border_color = base.darkened(0.3)
+			s.border_width_bottom = 7 if st != "pressed" else 2
+			s.content_margin_top = 12 if st != "pressed" else 17
 		b.add_theme_stylebox_override(st, s)
 	var fc := Color.WHITE if accent else INK
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
@@ -326,9 +340,9 @@ static func bar(width: float, height: float, color: Color) -> ProgressBar:
 	b.max_value = 1.0
 	b.step = 0.0
 	b.custom_minimum_size = Vector2(width, height)
-	var fill := sbox(color, 6, 0, 0)
-	fill.border_color = Color(0, 0, 0, 0.18)
-	fill.set_border_width_all(1)
+	var fill := sbox(color, 8, 0, 0)
+	fill.border_color = color.lightened(0.35)
+	fill.border_width_top = int(maxf(1.0, height * 0.25))  # reflet clair en haut de la jauge
 	b.add_theme_stylebox_override("fill", fill)
 	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return b
@@ -347,3 +361,79 @@ static func passive(c: Control) -> Control:
 
 static func hex(c: int) -> String:
 	return "#%06x" % c
+
+
+# ---------- animations ----------
+
+## Apparition « pop » : le contrôle grossit depuis `from` avec un rebond, en fondu, après `delay` secondes.
+## Le pivot est pris au centre au moment où l'animation démarre (la taille est alors connue).
+static func pop_in(c: Control, delay := 0.0, from := 0.6, dur := 0.32) -> void:
+	c.modulate.a = 0.0
+	c.scale = Vector2.ONE * from
+	var tw := c.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_callback(func() -> void: c.pivot_offset = c.size / 2.0)
+	tw.tween_property(c, "scale", Vector2.ONE, dur).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(c, "modulate:a", 1.0, dur * 0.5)
+
+
+## Fait apparaître les enfants d'un conteneur l'un après l'autre.
+static func stagger(parent: Node, step := 0.06, delay := 0.1, from := 0.8) -> void:
+	var i := 0
+	for c in parent.get_children():
+		if c is Control:
+			pop_in(c, delay + i * step, from, 0.28)
+			i += 1
+
+
+## Nombre qui défile de `a` à `b` dans un Label (`fmt` : format avec un %d).
+static func count_up(l: Label, a: int, b: int, delay := 0.0, dur := 0.6, fmt := "%d") -> void:
+	l.text = fmt % a
+	if a == b:
+		return
+	var tw := l.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_method(func(v: float) -> void: l.text = fmt % roundi(v), float(a), float(b), dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+## Petit écrasement d'un bouton au clic.
+static func squash_on_press(b: Button) -> void:
+	b.button_down.connect(func() -> void:
+		b.pivot_offset = b.size / 2.0
+		var tw := b.create_tween()
+		tw.tween_property(b, "scale", Vector2(1.06, 0.92), 0.06)
+		tw.tween_property(b, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT))
+
+
+## Jauge avec barre « retard » : quand la valeur baisse, une barre claire reste un instant derrière puis la
+## rattrape (on voit ce qu'on vient de perdre). Appeler `tick_lag` à chaque image.
+static func lag_bar(width: float, height: float, color: Color) -> ProgressBar:
+	var b := bar(width, height, color)
+	b.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+	var lag := ProgressBar.new()
+	lag.name = "retard"
+	lag.show_percentage = false
+	lag.max_value = 1.0
+	lag.step = 0.0
+	lag.value = 1.0
+	lag.show_behind_parent = true
+	lag.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lag.add_theme_stylebox_override("fill", sbox(Color("#ffffff"), 8, 0, 0))
+	b.add_child(lag)
+	b.set_meta("hold", 0.0)
+	return b
+
+
+static func tick_lag(b: ProgressBar, dt: float) -> void:
+	var lag: ProgressBar = b.get_node_or_null("retard")
+	if lag == null:
+		return
+	if b.value >= lag.value:
+		lag.value = b.value
+		b.set_meta("hold", 0.45)
+		return
+	var hold: float = b.get_meta("hold", 0.0) - dt
+	b.set_meta("hold", hold)
+	if hold < 0.0:
+		lag.value = maxf(b.value, lag.value - dt * 0.5)

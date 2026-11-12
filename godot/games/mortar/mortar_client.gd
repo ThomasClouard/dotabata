@@ -257,7 +257,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 	for id: String in hp_order:
 		var p: ClientPlayer = ctx.players[id]
 		var l := UI.label("", 14)
-		var bar := UI.bar(170, 10, Gfx.col(p.color))
+		var bar := UI.lag_bar(170, 12, Gfx.col(p.color))
 		side_box.add_child(l)
 		side_box.add_child(bar)
 		side_rows[id] = {"label": l, "bar": bar}
@@ -484,6 +484,9 @@ func on_frame(dt: float) -> void:
 	for r: MeshInstance3D in rings:
 		r.visible = shrinking
 		r.scale = Vector3(zr, 6.0 + sin(t * 6.0) * 2.0, zr)
+
+	for row: Dictionary in side_rows.values():
+		UI.tick_lag(row["bar"], dt)
 
 	# ----- HUD -----
 	hud_timer -= dt

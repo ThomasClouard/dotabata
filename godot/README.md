@@ -2,7 +2,7 @@
 
 Tout le jeu est ici, **serveur compris** : menu principal avec la liste des parties du réseau local, création
 d'une partie, lobby, Parcours délirant, Abri & mortier, Saut cosmique, écran des scores, podium. Chaque exe peut héberger une partie
-(`server/`) ou rejoindre celle d'un autre. Tout est procédural (aucune image, aucun son, aucun modèle à charger).
+(`server/`) ou rejoindre celle d'un autre. Tout est procédural (aucune image, aucun son, aucun modèle à charger), sauf la police Fredoka (`ui/fonts/`, licence OFL).
 
 ## Lancer
 

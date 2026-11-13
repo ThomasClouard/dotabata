@@ -121,6 +121,10 @@ func body(e: Dictionary, i: int) -> Node3D:
 			_tv(g, e, sx, sy, sz)
 		"pot":
 			_pot(g, sx, sy, sz)
+		"flowerpot":
+			# pot de fleurs : solide, trop haut pour sauter dessus (on le contourne)
+			_pot(g, sx, sy, sz)
+			rec["heads"] = _bouquet(g, sy / 2.0, sy / 2.0 + maxf(1.2, sy * 0.8), minf(sx, sz) * 0.3, i)
 		"leaf":
 			_leaf(g, sx, sy, sz)
 		"wire":
@@ -656,24 +660,7 @@ func _deco(e: Dictionary, i: int, rec: Dictionary) -> Node3D:
 		"flowers":
 			var r := minf(sx, sz) * 0.28
 			Gfx.mesh(Shapes.cylinder(r, r * 0.8, sy * 0.38, 20), Gfx.mat(_color(e, 0x4cc9f0), {"rough": 0.15, "metal": 0.1}), 0, sy * 0.19, 0, g)
-			var stem := Gfx.mat(0x2d9c4a, {"rough": 0.6})
-			var heads := []
-			for k in 5:
-				var a := k * TAU / 5.0 + i
-				var top := Vector3(cos(a) * minf(sx, sz) * 0.32 * (0.4 if k == 0 else 1.0), sy * (0.82 + _hash(i, k) * 0.15), sin(a) * minf(sx, sz) * 0.32 * (0.4 if k == 0 else 1.0))
-				var st := Gfx.mesh(Shapes.cylinder(0.05, 0.05, 1.0, 6), stem, 0, 0, 0, g)
-				Gfx.stretch(st, Vector3(0, sy * 0.3, 0), top, 1.0)
-				var h := Node3D.new()
-				h.position = top
-				g.add_child(h)
-				var fc: int = FLOWER_COLORS[(k + i) % FLOWER_COLORS.size()]
-				for p in 5:
-					var pa := p * TAU / 5.0
-					var pm := Gfx.mesh(Shapes.sphere(0.16, 8, 6), Gfx.mat(fc, {"rough": 0.4}), cos(pa) * 0.17, 0, sin(pa) * 0.17, h)
-					pm.scale = Vector3(1, 0.5, 1)
-				Gfx.mesh(Shapes.sphere(0.12, 8, 6), Gfx.mat(0xffd60a), 0, 0.04, 0, h)
-				heads.append([h, _hash(k, i) * TAU])
-			rec["heads"] = heads
+			rec["heads"] = _bouquet(g, sy * 0.3, sy * 0.82, minf(sx, sz) * 0.32, i)
 		"stem":
 			var r := minf(sx, sz) / 2.0
 			Gfx.mesh(Shapes.cylinder(r * 0.85, r, sy, 16), Gfx.mat(0x3a9d3f, {"rough": 0.55}), 0, sy / 2.0, 0, g)
@@ -686,6 +673,28 @@ func _deco(e: Dictionary, i: int, rec: Dictionary) -> Node3D:
 		"room":
 			_room(g, sx, sy, sz)
 	return g
+
+
+## Bouquet : 5 tiges qui partent de (0, y0, 0) et des fleurs vers la hauteur y1, écartées de `spread`. Renvoie [[tête, déphasage], …].
+func _bouquet(g: Node3D, y0: float, y1: float, spread: float, i: int) -> Array:
+	var stem := Gfx.mat(0x2d9c4a, {"rough": 0.6})
+	var heads := []
+	for k in 5:
+		var a := k * TAU / 5.0 + i
+		var top := Vector3(cos(a) * spread * (0.4 if k == 0 else 1.0), y1 + (y1 - y0) * _hash(i, k) * 0.25, sin(a) * spread * (0.4 if k == 0 else 1.0))
+		var st := Gfx.mesh(Shapes.cylinder(0.05, 0.05, 1.0, 6), stem, 0, 0, 0, g)
+		Gfx.stretch(st, Vector3(0, y0, 0), top, 1.0)
+		var h := Node3D.new()
+		h.position = top
+		g.add_child(h)
+		var fc: int = FLOWER_COLORS[(k + i) % FLOWER_COLORS.size()]
+		for p in 5:
+			var pa := p * TAU / 5.0
+			var pm := Gfx.mesh(Shapes.sphere(0.16, 8, 6), Gfx.mat(fc, {"rough": 0.4}), cos(pa) * 0.17, 0, sin(pa) * 0.17, h)
+			pm.scale = Vector3(1, 0.5, 1)
+		Gfx.mesh(Shapes.sphere(0.12, 8, 6), Gfx.mat(0xffd60a), 0, 0.04, 0, h)
+		heads.append([h, _hash(k, i) * TAU])
+	return heads
 
 
 ## Étendoir : deux pieds en A aux bouts (x local = ±sx/2), barres du haut, et linge pendu sous les fils.
@@ -773,6 +782,10 @@ func update(t: float, dt: float) -> void:
 				_update_deco(rec, t)
 				continue
 		match rec["skin"]:
+			"flowerpot":
+				for h: Array in rec["heads"]:
+					var n: Node3D = h[0]
+					n.rotation = Vector3(sin(t * 1.3 + h[1]) * 0.15, 0, cos(t * 1.1 + h[1]) * 0.15)
 			"record", "sunflower":
 				rec["spin"].rotation.y = Level.spin_angle(e, t)
 			"plane":

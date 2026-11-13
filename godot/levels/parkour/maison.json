@@ -65,31 +65,48 @@
       ]
     },
     {
-      "type": "deco",
-      "kind": "flowers",
+      "id": "pot-de-fleurs",
+      "type": "platform",
+      "skin": "flowerpot",
       "pos": [
-        4.6,
-        1.5,
-        11
+        -1.7,
+        0.9,
+        11.5
       ],
       "size": [
-        2.2,
-        3,
-        2.2
+        2.6,
+        1.8,
+        2.6
       ]
     },
     {
-      "type": "deco",
-      "kind": "flowers",
+      "id": "cahier",
+      "type": "platform",
+      "skin": "notebook",
+      "color": "#ff4d6d",
       "pos": [
-        -4.8,
-        1.2,
-        20
+        1.6,
+        0.25,
+        16
       ],
       "size": [
+        4.6,
+        0.5,
+        3.4
+      ],
+      "yaw": 0.25
+    },
+    {
+      "type": "coin",
+      "pos": [
         1.6,
-        2.4,
-        1.6
+        1.4,
+        16
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
       ]
     },
     {
@@ -97,28 +114,16 @@
       "type": "platform",
       "skin": "pencilcase",
       "pos": [
-        -3.6,
-        0.6,
-        15
+        -1.4,
+        0.55,
+        21
       ],
       "size": [
-        2.6,
-        1.2,
-        6
-      ]
-    },
-    {
-      "type": "coin",
-      "pos": [
-        -3.6,
-        2.2,
-        15
+        5,
+        1.1,
+        1.8
       ],
-      "size": [
-        0.8,
-        0.8,
-        0.8
-      ]
+      "yaw": -0.15
     },
     {
       "id": "crayon",

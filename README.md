@@ -19,7 +19,7 @@ Trois mini-jeux pour l'instant :
 
   Réglages de la manche en plus du mode, de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
 
-  ![Départ du niveau « fête foraine » : les concurrents s'élancent sous l'arche, entre deux rangées de spectateurs](docs/captures/parcours.jpg)
+  ![Départ du « volcan grincheux » : les concurrents s'élancent sous l'arche, entre les bandes de lave](docs/captures/parcours.jpg)
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
 
   <img src="docs/captures/mortier-construction.jpg" width="49%" alt="Construction de l'abri en blocs de bois sur son île"> <img src="docs/captures/mortier-bataille.jpg" width="49%" alt="Bataille : la jauge de tir se charge, les obus volent entre les îles">

@@ -24,14 +24,14 @@ Liste des corrections et améliorations à faire.
 - [ ] **Zoom** : il y a un problème quand on passe en zoom.
 - [ ] **Dérive** : elle dure trop longtemps. Quand on a raté son saut, on doit perdre rapidement.
 - [ ] **Recommencer** : voir s'il faut ajouter un mode qui permet de réessayer quand on se rate.
-- [ ] **Position en vol** : le personnage plane sur le dos. Je préfère qu'il soit sur le ventre.
-- [ ] **Rétrofusées au joystick** : elles doivent marcher avec le joystick, sans le bouton de saut. Une
+- [x] **Position en vol** : le personnage plane sur le dos. Je préfère qu'il soit sur le ventre.
+- [x] **Rétrofusées au joystick** : elles doivent marcher avec le joystick, sans le bouton de saut. Une
   rétrofusée sort du côté opposé à la direction et pousse le personnage :
   - **haut** : elle sort de son ventre et le pousse vers le haut (vers son dos) ;
   - **bas** : elle sort de son dos et le pousse vers le bas (vers son ventre) ;
   - **gauche** : elle sort de son côté droit et le pousse vers la gauche ;
   - **droite** : elle sort de son côté gauche et le pousse vers la droite.
-- [ ] **Atterrissage** : ajouter une petite animation à l'arrivée. Aujourd'hui, la caméra change d'un coup et on
+- [x] **Atterrissage** : ajouter une petite animation à l'arrivée. Aujourd'hui, la caméra change d'un coup et on
   voit tout à coup le personnage debout.
 
 ## Parcours délirant

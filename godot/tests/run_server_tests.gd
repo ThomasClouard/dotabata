@@ -225,6 +225,37 @@ func _test_mortar() -> void:
 	_eq(ids.size(), 5, "mortier : joueurs distincts")
 	_ok(results.any(func(r: Dictionary) -> bool: return r["rank"] == 0), "mortier : un vainqueur")
 	print("mortier : %d obus, %d explosions, fin à %.1f s" % [h.of("shell").size(), h.of("boom").size(), h.t])
+	_test_mortar_holes()
+
+
+## Option « les obus trouent les îles » : des trous creusés, le sol des collisions découpé autour, partie jouable.
+func _test_mortar_holes() -> void:
+	var rects := MortarShared.island_rects({Vector2i(5, 5): true, Vector2i(6, 5): true})
+	var area := 0
+	for r: Array in rects:
+		area += (r[2] - r[0]) * (r[3] - r[1])
+	_eq(area, MortarShared.HOLE_N * MortarShared.HOLE_N - 2, "trous : le sol plein couvre tout sauf les 2 cases")
+	_eq(MortarShared.island_rects({}).size(), 1, "trous : île intacte en un seul bloc")
+	var s := Scoring.default_game_settings(GameMetas.MORTAR)
+	s.merge({"buildTime": 5, "battleTime": 90, "shrink": 30, "holes": true}, true)
+	var h := Harness.new(s, 5, true)
+	var g := MortarServer.new(h.ctx)
+	h.game = g
+	var res := g.on_start()
+	_ok(res["init"]["holes"] == true, "trous : option transmise aux clients")
+	for id: String in res["spawns"]:
+		var sp: Array = res["spawns"][id]
+		h.player(id).p = [sp[0], sp[1], sp[2]]
+	h.simulate(120.0)
+	_ok(h.ended, "trous : la bataille se termine")
+	var dug := 0
+	for m: Dictionary in h.of("boom"):
+		dug += m["holes"].size()
+	_ok(dug > 20, "trous : des cases arrachées (%d)" % dug)
+	_ok(MortarShared.colliders(g.n, {}, -1, g.holes).size() > g.n, "trous : sol des collisions découpé")
+	var c0 := MortarShared.plot_center(0, g.n)
+	_ok(not MortarShared.is_hole({}, 0, g.n, c0.x, c0.z), "trous : aucun trou sans option")
+	print("mortier troué : %d cases arrachées" % dug)
 
 
 func _space(n: int, bots: bool, extra := {}) -> Harness:

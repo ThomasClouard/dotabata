@@ -13,6 +13,7 @@ export const mortarMeta: GameMeta = {
     hp: { type: 'number', label: 'Points de vie', default: 100, min: 20, max: 300, step: 10 },
     crates: { type: 'bool', label: 'Caisses bonus', default: true },
     shrink: { type: 'number', label: 'Durée du rétrécissement final', default: 35, min: 0, max: 120, step: 5, unit: 's' },
+    holes: { type: 'bool', label: 'Les obus trouent les îles', default: false },
   },
 };
 

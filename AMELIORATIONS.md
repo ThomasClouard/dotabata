@@ -14,8 +14,8 @@ Liste des corrections et améliorations à faire.
 - [ ] **Caméra** : on est trop loin quand il ne reste plus beaucoup de joueurs. Soit rapprocher les joueurs,
   soit ajouter un zoom.
 - [ ] **Réduction de la zone** : à quoi sert-elle ?
-- [ ] **Projectiles** : refaire les mortiers, avec des missiles stylés.
-- [ ] **Trous dans les plateformes** : les missiles abîment aussi la plateforme. À force, elle se remplit de trous,
+- [x] **Projectiles** : refaire les mortiers, avec des missiles stylés.
+- [x] **Trous dans les plateformes** : les missiles abîment aussi la plateforme. À force, elle se remplit de trous,
   ce qui complique la partie.
 
 ## Saut cosmique

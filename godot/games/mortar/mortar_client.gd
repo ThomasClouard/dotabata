@@ -3,6 +3,15 @@ extends ClientGame
 ## Abri & mortier — côté client : îles, blocs instanciés, visée, obus, explosions, caisses, zone, HUD.
 
 const SHELL_COLOR := {"normal": 0x2b2140, "mega": 0xd00000, "cluster": 0xff9f1c, "sub": 0xff9f1c}
+## Missiles : [couleur du corps, couleur de la pointe et des ailerons, taille].
+const MISSILE := {
+	"normal": [0xf8f9fa, 0xff4d6d, 1.0],
+	"mega": [0x2b2140, 0xd00000, 1.55],
+	"cluster": [0xffd60a, 0xff7b00, 1.15],
+	"sub": [0xffd60a, 0xff7b00, 0.6],
+}
+const FIRE := [0xfff3b0, 0xffd166, 0xff9f1c, 0xff6b35]
+const SMOKE := [0xadb5bd, 0x868e96, 0xced4da]
 const CRATE_INFO := {
 	"mega": {"color": 0xd00000, "name": "Méga-obus"},
 	"cluster": {"color": 0xff9f1c, "name": "Obus à fragmentation"},
@@ -50,6 +59,15 @@ var b_mats: HBoxContainer
 var b_hint: Label
 var b_bar: ProgressBar
 var mat_chips: Array = []
+var holes_on := false  # option : les obus trouent les îles
+var holes := {}  # île → {Vector2i(cx, cz): true}
+var island_tops := {}  # île → MeshInstance3D du sol découpé en cases
+var top_mat: StandardMaterial3D
+var wall_mat: StandardMaterial3D
+var owner_color := {}  # île → couleur du propriétaire
+var decos: Array = []  # [nœud, île, lx, lz] : décor posé sur le pourtour, qui tombe si le sol disparaît
+var falling: Array = []  # {node, vy, spin}
+var fx: Array = []  # effets d'explosion animés (boule de feu, fumée, lumière, traces)
 
 
 func _rebuild() -> void:
@@ -69,9 +87,10 @@ func _rebuild() -> void:
 ## Décor solide des éclats et des os (Jolt) : toutes les îles et tous les blocs.
 func _sync_ground() -> void:
 	if Debris.enabled():
-		var all: Array = MortarShared.colliders(n, {}, -1)
+		var all: Array = MortarShared.colliders(n, {}, -1, holes)
+		var islands := all.size()
 		for p in n:
-			all.append_array(MortarShared.colliders(n, blocks, p).slice(n))
+			all.append_array(MortarShared.colliders(n, blocks, p, holes).slice(islands))
 		ctx.debris.set_ground(all)
 
 
@@ -96,20 +115,160 @@ func _remove_blocks(keys: Array, from: Variant = null) -> void:
 	_rebuild()
 
 
-func _explosion(p: Vector3, r: float, kind: String) -> void:
-	ctx.particles.burst(p, 70 if kind == "mega" else 34, [0xffd60a, 0xff9f1c, 0xff4d6d, 0xffffff], r * 4.5, 0.3, 0.7, 10.0)
-	ctx.particles.burst(p, 14, [0x6c757d, 0x495057], r * 2.0, 0.45, 1.3, 2.0, 0.8)
+## Explosion : éclair aveuglant, boule de feu en plusieurs bouffées qui virent à la fumée noire et montent,
+## gerbe d'étincelles, onde de choc, lueur sur le décor et trace de brûlé au sol.
+func _explosion(p: Vector3, r: float, kind: String, burn_mark := true) -> void:
+	var big := kind == "mega"
+	var small := kind == "sub" or kind == "cluster"
 	var d := p.distance_to(ctx.body.pos())
-	ctx.sfx.boom(clampf(14.0 / (d + 4.0), 0.15, 1.0) * (1.3 if kind == "mega" else 1.0))
+	ctx.sfx.boom(clampf(14.0 / (d + 4.0), 0.15, 1.0) * (1.3 if big else 1.0))
 	if d < 14.0:
-		ctx.impact((1.0 - d / 14.0) * (1.0 if kind == "mega" else 0.65), Color(1.0, 0.8, 0.45))
-	# éclair : sphère qui gonfle puis disparaît, et onde de choc au sol
-	var fm := Gfx.flat(0xffe28a, {"opacity": 0.9})
-	var flash := Gfx.mesh(Shapes.sphere(1.0, 20, 14), fm, p.x, p.y, p.z, ctx.world, false)
-	flashes.append({"mesh": flash, "mat": fm, "life": 0.28, "max": 0.28, "r": r, "wave": false})
-	var wm := Gfx.flat(0xffffff, {"opacity": 0.8})
-	var wave := Gfx.mesh(Shapes.torus(1.0, 0.07, 40, 8), wm, p.x, maxf(0.15, p.y), p.z, ctx.world, false)
-	flashes.append({"mesh": wave, "mat": wm, "life": 0.45, "max": 0.45, "r": r * 1.5, "wave": true})
+		ctx.impact((1.0 - d / 14.0) * (1.0 if big else 0.65), Color(1.0, 0.8, 0.45))
+	# lueur orangée sur tout ce qui est autour
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.62, 0.3)
+	light.omni_range = r * 5.0
+	light.light_energy = 0.0
+	light.shadow_enabled = false
+	light.position = p + Vector3(0, 0.6, 0)
+	ctx.world.add_child(light)
+	fx.append({"k": "light", "node": light, "age": 0.0, "max": 0.45, "e": 9.0 if big else 6.0})
+	# éclair blanc qui gonfle très vite
+	var cm := Gfx.flat(0xfff8e1, {"add": true})
+	var core := Gfx.mesh(Shapes.sphere(1.0, 18, 12), cm, p.x, p.y + 0.2, p.z, ctx.world, false)
+	fx.append({"k": "core", "node": core, "mat": cm, "age": 0.0, "max": 0.22, "r": r * 0.75})
+	# boule de feu : des bouffées qui gonflent, s'assombrissent en fumée et s'élèvent
+	var puffs := 12 if big else (4 if small else 8)
+	var sphere := Shapes.sphere(1.0, 14, 10)
+	for k in puffs:
+		var dir := Vector3(randf() - 0.5, randf() * 0.7 + 0.15, randf() - 0.5).normalized()
+		var at := p + dir * r * randf_range(0.1, 0.4)
+		var pm := Gfx.mat(FIRE[k % FIRE.size()], {"glow": 3.0, "opacity": 0.95, "rough": 1.0})
+		pm.rim_enabled = false
+		var puff := Gfx.mesh(sphere, pm, at.x, at.y, at.z, ctx.world, false)
+		puff.scale = Vector3.ONE * 0.05
+		fx.append({"k": "puff", "node": puff, "mat": pm, "age": -randf() * 0.08, "max": randf_range(1.3, 1.9),
+			"size": r * randf_range(0.32, 0.5), "v": dir * r * randf_range(0.9, 1.6) + Vector3(0, 0.8, 0), "fire": FIRE[k % FIRE.size()]})
+	# étincelles et éclats
+	ctx.particles.burst(p, 60 if big else (18 if small else 34), [0xfff3b0, 0xffd166, 0xff9f1c, 0xffffff], r * 5.0, 0.12, 0.7, 14.0, 0.7)
+	ctx.particles.burst(p, 10 if big else 5, [0x495057, 0x343a40], r * 3.0, 0.2, 1.1, 16.0, 0.9)
+	# onde de choc : anneau qui file au ras du sol
+	var wm := Gfx.flat(0xfff3b0, {"opacity": 0.85})
+	var wave := Gfx.mesh(Shapes.torus(1.0, 0.06, 48, 8), wm, p.x, maxf(0.12, p.y), p.z, ctx.world, false)
+	flashes.append({"mesh": wave, "mat": wm, "life": 0.4, "max": 0.4, "r": r * 1.7, "wave": true})
+	# trace de brûlé sur l'île, qui s'estompe lentement
+	if burn_mark and p.y < 0.6 and _on_island(p):
+		var sm := Gfx.flat(0x1f1a17, {"opacity": 0.6})
+		var scorch := Gfx.mesh(Shapes.cylinder(r * 0.55, r * 0.55, 0.01, 24), sm, p.x, 0.02, p.z, ctx.world, false)
+		fx.append({"k": "scorch", "node": scorch, "mat": sm, "age": 0.0, "max": 9.0})
+
+
+func _on_island(p: Vector3) -> bool:
+	for i in n:
+		var l := MortarShared.to_local(i, n, p.x, p.z)
+		if absf(l[0]) < MortarShared.ISLAND / 2.0 and absf(l[1]) < MortarShared.ISLAND / 2.0:
+			return not MortarShared.is_hole(holes, i, n, p.x, p.z)
+	return false
+
+
+func _update_fx(dt: float) -> void:
+	for i in range(fx.size() - 1, -1, -1):
+		var e: Dictionary = fx[i]
+		e["age"] += dt
+		var a: float = e["age"]
+		var k: float = clampf(a / e["max"], 0.0, 1.0)
+		var node: Node3D = e["node"]
+		match e["k"]:
+			"light":
+				(node as OmniLight3D).light_energy = e["e"] * (1.0 - k) * (1.0 - k) if a > 0.03 else e["e"] * a / 0.03
+			"core":
+				node.scale = Vector3.ONE * maxf(0.01, e["r"] * (0.3 + 0.9 * sqrt(k)))
+				(e["mat"] as StandardMaterial3D).albedo_color.a = 1.0 - k
+			"puff":
+				if a < 0.0:
+					continue
+				# gonfle vite, puis ralentit ; feu → fumée noire qui monte et se dissipe
+				var grow := 1.0 - pow(1.0 - minf(1.0, a / 0.35), 3.0)
+				var v: Vector3 = e["v"]
+				node.position += v * dt
+				e["v"] = v * exp(-4.0 * dt) + Vector3(0, 1.4 * dt, 0)
+				node.scale = Vector3.ONE * maxf(0.05, e["size"] * (0.25 + 0.75 * grow + 0.5 * k))
+				var m: StandardMaterial3D = e["mat"]
+				var burn := clampf((a - 0.12) / 0.45, 0.0, 1.0)
+				var fire := Gfx.col(e["fire"])
+				var smoke := Color(0.22, 0.2, 0.2).lerp(Color(0.5, 0.5, 0.52), k)
+				m.albedo_color = Color(fire.lerp(smoke, burn), 0.95 * (1.0 - k * k))
+				m.emission_energy_multiplier = 3.0 * (1.0 - burn)
+			"scorch":
+				(e["mat"] as StandardMaterial3D).albedo_color.a = 0.6 * (1.0 - k * k)
+		if e["age"] >= e["max"]:
+			node.queue_free()
+			fx.remove_at(i)
+	# décor qui tombe dans un trou
+	for i in range(falling.size() - 1, -1, -1):
+		var fl: Dictionary = falling[i]
+		var nd: Node3D = fl["node"]
+		if not is_instance_valid(nd):
+			falling.remove_at(i)
+			continue
+		fl["vy"] -= 18.0 * dt
+		nd.position.y += fl["vy"] * dt
+		nd.rotation.x += fl["spin"] * dt
+		if nd.position.y < -20.0:
+			nd.queue_free()
+			falling.remove_at(i)
+
+
+# ---------- missiles ----------
+
+## Missile stylé : corps, bague, pointe, ailerons, tuyère et flamme. Son axe +Y suit la trajectoire.
+func _make_missile(kind: String) -> Dictionary:
+	var spec: Array = MISSILE[kind]
+	var root := Node3D.new()
+	ctx.world.add_child(root)
+	var body := Node3D.new()
+	body.scale = Vector3.ONE * float(spec[2])
+	root.add_child(body)
+	var hull := Gfx.mat(spec[0], {"rough": 0.25, "metal": 0.25})
+	var accent := Gfx.mat(spec[1], {"rough": 0.3, "metal": 0.2})
+	Gfx.mesh(Shapes.cylinder(0.13, 0.13, 0.62, 16), hull, 0, 0, 0, body)
+	Gfx.mesh(Shapes.cylinder(0.0, 0.13, 0.3, 16), accent, 0, 0.46, 0, body)
+	Gfx.mesh(Shapes.cylinder(0.137, 0.137, 0.07, 16), accent, 0, 0.14, 0, body)
+	Gfx.mesh(Shapes.cylinder(0.137, 0.137, 0.04, 16), accent, 0, 0.03, 0, body)
+	Gfx.mesh(Shapes.cylinder(0.08, 0.11, 0.09, 12), Gfx.mat(0x343a40, {"metal": 0.7, "rough": 0.3}), 0, -0.35, 0, body)
+	var fin := Shapes.rbox(0.17, 0.24, 0.03, 0.01)
+	for k in 4:
+		var a := k * PI / 2.0
+		var f := Gfx.mesh(fin, accent, cos(a) * 0.2, -0.2, sin(a) * 0.2, body)
+		f.rotation.y = -a
+	# flamme : un cône extérieur orange et un cœur presque blanc, en fusion additive
+	var flame := Gfx.mesh(Shapes.cylinder(0.11, 0.0, 0.7, 12), Gfx.flat(0xff7b00, {"add": true}), 0, -0.75, 0, body, false)
+	var heart := Gfx.mesh(Shapes.cylinder(0.065, 0.0, 0.4, 10), Gfx.flat(0xfff3b0, {"add": true}), 0, -0.58, 0, body, false)
+	return {"root": root, "body": body, "flame": flame, "heart": heart, "size": float(spec[2])}
+
+
+func _update_missile(sh: Dictionary, t: float) -> void:
+	var age: float = t - sh["at"]
+	var p := MortarShared.shell_at(sh["p"], sh["v"], age)
+	var v := Vector3(sh["v"][0], sh["v"][1] - MortarShared.G * age, sh["v"][2])
+	var dir := v.normalized() if v.length_squared() > 1e-4 else Vector3.UP
+	var root: Node3D = sh["root"]
+	root.position = p
+	# nez dans le sens du vol, et le missile tourne sur lui-même
+	root.basis = Basis(Quaternion(Vector3.UP, dir)) * Basis(Vector3.UP, t * 9.0 + float(sh["roll"]))
+	var fl: Node3D = sh["flame"]
+	fl.scale = Vector3(randf_range(0.85, 1.15), randf_range(0.75, 1.35), randf_range(0.85, 1.15))
+	(sh["heart"] as Node3D).scale = Vector3(1, randf_range(0.8, 1.2), 1)
+	var sz: float = sh["size"]
+	var tail := p - dir * 0.55 * sz
+	# traînée : du feu juste derrière, puis une fumée qui reste en l'air
+	for k in 2:
+		var j := Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.6
+		var fv := -dir * randf_range(2.0, 4.0) + j
+		ctx.particles.emit(tail.x, tail.y, tail.z, fv.x, fv.y, fv.z, FIRE[randi() % FIRE.size()], 0.15 * sz, 0.22, 0.0)
+	if randf() < 0.8:
+		var sv := -dir * 0.6 + Vector3(randf() - 0.5, randf() * 0.4, randf() - 0.5) * 0.5
+		ctx.particles.emit(tail.x, tail.y, tail.z, sv.x, sv.y, sv.z, SMOKE[randi() % SMOKE.size()], 0.24 * sz, 1.0, -0.6)
 
 
 ## Case visée : 1,6 m devant le joueur, dans la direction de la caméra. Vector3i(x, hauteur, z) ou null.
@@ -135,6 +294,118 @@ static func _grid_mesh(size: int) -> ArrayMesh:
 	return m
 
 
+# ---------- îles trouées (option) ----------
+
+## Sol d'une île en cases de HOLE_CELL m : dessus herbeux (bruni au bord des trous, cadre de la zone constructible à la
+## couleur du propriétaire), parois de terre tout autour des trous et du bord.
+func _build_island(plot: int) -> void:
+	var h: Dictionary = holes.get(plot, {})
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sw := SurfaceTool.new()
+	sw.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var cs := MortarShared.HOLE_CELL
+	var half := MortarShared.ISLAND / 2.0
+	var depth := MortarShared.THICK
+	var frame := Gfx.col(owner_color.get(plot, 0xffffff)).lightened(0.25)
+	var burnt := Color(0.45, 0.32, 0.2)
+	var dirt := Color(0.69, 0.54, 0.41)
+	var dark_dirt := Color(0.5, 0.36, 0.25)
+	var zone := MortarShared.GRID / 2.0
+	for cz in MortarShared.HOLE_N:
+		for cx in MortarShared.HOLE_N:
+			var c := Vector2i(cx, cz)
+			if h.has(c):
+				continue
+			var x0 := -half + cx * cs
+			var z0 := -half + cz * cs
+			var x1 := x0 + cs
+			var z1 := z0 + cs
+			# couleur du dessus : cadre de la zone constructible, brûlé près d'un trou, ou herbe
+			var col := Color.WHITE
+			var mx := (x0 + x1) / 2.0
+			var mz := (z0 + z1) / 2.0
+			var on_frame := (absf(absf(mx) - zone) < cs * 0.6 and absf(mz) < zone + cs) or (absf(absf(mz) - zone) < cs * 0.6 and absf(mx) < zone + cs)
+			if on_frame:
+				col = frame
+			var near := false
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
+				if h.has(c + d):
+					near = true
+					break
+			if near:
+				col = col * burnt
+			_quad(st, Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1), Vector3(x0, 0, z1), Vector3.UP, col, true)
+			# parois : vers un trou ou vers le vide du bord
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var o := c + d
+				var outside := o.x < 0 or o.y < 0 or o.x >= MortarShared.HOLE_N or o.y >= MortarShared.HOLE_N
+				if not outside and not h.has(o):
+					continue
+				var a: Vector3
+				var b: Vector3
+				if d.x == 1:
+					a = Vector3(x1, 0, z1)
+					b = Vector3(x1, 0, z0)
+				elif d.x == -1:
+					a = Vector3(x0, 0, z0)
+					b = Vector3(x0, 0, z1)
+				elif d.y == 1:
+					a = Vector3(x0, 0, z1)
+					b = Vector3(x1, 0, z1)
+				else:
+					a = Vector3(x1, 0, z0)
+					b = Vector3(x0, 0, z0)
+				var down := Vector3(0, -depth, 0)
+				var wall := dirt if outside else dark_dirt
+				_quad(sw, a, b, b + down, a + down, Vector3(d.x, 0, d.y), wall, false)
+			_quad(sw, Vector3(x0, -depth, z1), Vector3(x1, -depth, z1), Vector3(x1, -depth, z0), Vector3(x0, -depth, z0), Vector3.DOWN, dark_dirt, false)
+	var mesh := st.commit()
+	sw.commit(mesh)
+	mesh.surface_set_material(0, top_mat)
+	mesh.surface_set_material(1, wall_mat)
+	var top: MeshInstance3D = island_tops[plot]
+	top.mesh = mesh
+
+
+## Quadrilatère a b c d (dans le sens horaire vu du côté de la normale), de couleur unie ; UV pour la texture d'herbe.
+static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, col: Color, grass: bool) -> void:
+	var half := MortarShared.ISLAND / 2.0
+	for v: Vector3 in [a, b, c, a, c, d]:
+		st.set_normal(normal)
+		st.set_color(col)
+		st.set_uv(Vector2((v.x + half) / MortarShared.ISLAND, (v.z + half) / MortarShared.ISLAND) if grass else Vector2.ZERO)
+		st.add_vertex(v)
+
+
+## Trous creusés par une explosion : sol reconstruit, mottes de terre, décor qui tombe.
+func _dig(cells: Array, from: Vector3) -> void:
+	if cells.is_empty():
+		return
+	var touched := {}
+	for c: Array in cells:
+		var plot := int(c[0])
+		var h: Dictionary = holes.get(plot, {})
+		h[Vector2i(int(c[1]), int(c[2]))] = true
+		holes[plot] = h
+		touched[plot] = true
+	for plot: int in touched:
+		if island_tops.has(plot):
+			_build_island(plot)
+	ctx.particles.burst(from, 26, [0x8a5a3c, 0xb08968, 0x5c3d2e, 0x7fdc6b], 7.0, 0.2, 1.2, 16.0, 0.9)
+	for i in range(decos.size() - 1, -1, -1):
+		var dc: Array = decos[i]
+		var plot: int = dc[1]
+		if not touched.has(plot):
+			continue
+		var cell := Vector2i(floori((float(dc[2]) + MortarShared.ISLAND / 2.0) / MortarShared.HOLE_CELL), floori((float(dc[3]) + MortarShared.ISLAND / 2.0) / MortarShared.HOLE_CELL))
+		if holes[plot].has(cell):
+			falling.append({"node": dc[0], "vy": 2.0, "spin": randf_range(-4.0, 4.0)})
+			decos.remove_at(i)
+	dirty = true
+	_sync_ground()
+
+
 func on_enter(c: Main, p_init: Variant) -> void:
 	ctx = c
 	init = p_init
@@ -146,6 +417,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 	battle_end = init["battleEnd"]
 	shrink_start = init["shrinkStart"]
 	max_hp = init["hp"]
+	holes_on = init.get("holes", false) == true
 	ctx.set_sky(0x86ccff)
 	ctx.set_aim_mode(true)
 	ctx.cam_yaw = MortarShared.plot_yaw(my_plot, n) + PI  # face au centre de l'arène
@@ -163,26 +435,41 @@ func on_enter(c: Main, p_init: Variant) -> void:
 		var g := Node3D.new()
 		g.position = ctr
 		g.rotation.y = MortarShared.plot_yaw(p, n)
-		Gfx.mesh(Shapes.rbox(s + 0.3, 0.5, s + 0.3, 0.24), grass, 0, -0.25, 0, g)
-		# herbe au vent sur le pourtour (pas dans la zone constructible)
-		var herbe := Gfx.grass(Vector2(s, s), 6.0, 0x4fb945, 0xa9ea7e, [Rect2(-4.4, -4.4, 8.8, 8.8)], p + 3)
-		if herbe:
-			g.add_child(herbe)
-		Gfx.mesh(Shapes.rbox(s, MortarShared.THICK - 0.4, s, 0.3), Gfx.mat(0xb08968, {"rough": 0.85}), 0, -0.4 - (MortarShared.THICK - 0.4) / 2.0, 0, g)
-		var rock := Gfx.rock_under(s * 0.98, 6.0, s * 0.98, 0x8a5a3c, p * 7)
-		rock.position.y = -MortarShared.THICK + 0.1
-		g.add_child(rock)
-		# cadre lumineux de la zone constructible, à la couleur du propriétaire
 		var owner: ClientPlayer = ctx.players.get(owners.get(p, ""))
 		var color: int = owner.color if owner else 0xffffff
-		var frame := Gfx.mat(color, {"glow": 0.9})
-		var half := MortarShared.GRID / 2.0 + 0.1
-		for sgn in [-1.0, 1.0]:
-			Gfx.mesh(Shapes.rbox(MortarShared.GRID + 0.4, 0.08, 0.14, 0.04), frame, 0, 0.04, sgn * half, g)
-			Gfx.mesh(Shapes.rbox(0.14, 0.08, MortarShared.GRID + 0.4, 0.04), frame, sgn * half, 0.04, 0, g)
+		owner_color[p] = color
+		if holes_on:
+			# sol découpé en cases, reconstruit à chaque trou ; pas d'herbe ni de rocher dessous (on doit voir le vide)
+			if top_mat == null:
+				top_mat = Gfx.mat(0xffffff, {"map": Tex.soft("#7fdc6b", "#92e67c"), "uv": Vector2(3, 3), "rough": 0.7, "double": true})
+				top_mat.vertex_color_use_as_albedo = true
+				wall_mat = Gfx.mat(0xffffff, {"rough": 0.9, "double": true})
+				wall_mat.vertex_color_use_as_albedo = true
+			var top := MeshInstance3D.new()
+			g.add_child(top)
+			island_tops[p] = top
+			_build_island(p)
+		else:
+			Gfx.mesh(Shapes.rbox(s + 0.3, 0.5, s + 0.3, 0.24), grass, 0, -0.25, 0, g)
+			# herbe au vent sur le pourtour (pas dans la zone constructible)
+			var herbe := Gfx.grass(Vector2(s, s), 6.0, 0x4fb945, 0xa9ea7e, [Rect2(-4.4, -4.4, 8.8, 8.8)], p + 3)
+			if herbe:
+				g.add_child(herbe)
+			Gfx.mesh(Shapes.rbox(s, MortarShared.THICK - 0.4, s, 0.3), Gfx.mat(0xb08968, {"rough": 0.85}), 0, -0.4 - (MortarShared.THICK - 0.4) / 2.0, 0, g)
+			var rock := Gfx.rock_under(s * 0.98, 6.0, s * 0.98, 0x8a5a3c, p * 7)
+			rock.position.y = -MortarShared.THICK + 0.1
+			g.add_child(rock)
+			# cadre lumineux de la zone constructible, à la couleur du propriétaire (dessiné dans le sol sinon)
+			var frame := Gfx.mat(color, {"glow": 0.9})
+			var half := MortarShared.GRID / 2.0 + 0.1
+			for sgn in [-1.0, 1.0]:
+				Gfx.mesh(Shapes.rbox(MortarShared.GRID + 0.4, 0.08, 0.14, 0.04), frame, 0, 0.04, sgn * half, g)
+				Gfx.mesh(Shapes.rbox(0.14, 0.08, MortarShared.GRID + 0.4, 0.04), frame, sgn * half, 0.04, 0, g)
 		# drapeau, buissons et cailloux sur le pourtour (hors de la zone constructible)
-		Gfx.mesh(Shapes.cylinder(0.06, 0.06, 3.0, 8), Gfx.mat(0xffffff), 5.3, 1.5, 5.3, g)
-		Gfx.mesh(Shapes.rbox(1.1, 0.7, 0.06, 0.03), Gfx.mat(color, {"rough": 0.5}), 4.7, 2.6, 5.3, g)
+		var pole := Gfx.mesh(Shapes.cylinder(0.06, 0.06, 3.0, 8), Gfx.mat(0xffffff), 5.3, 1.5, 5.3, g)
+		var flag := Gfx.mesh(Shapes.rbox(1.1, 0.7, 0.06, 0.03), Gfx.mat(color, {"rough": 0.5}), 4.7, 2.6, 5.3, g)
+		decos.append([pole, p, 5.3, 5.3])
+		decos.append([flag, p, 5.3, 5.3])
 		for k in 7:
 			var a := int(fmod(k * 2.399 + p, 4.0))
 			var u := fmod(k * 3.7 + p * 1.3, 9.0) - 4.5
@@ -197,14 +484,19 @@ func on_enter(c: Main, p_init: Variant) -> void:
 			elif a == 3:
 				x = -edge
 				z = u
+			var dn: MeshInstance3D
 			if k % 3 == 0:
-				Gfx.mesh(pebble, Gfx.mat(0xaab3bd, {"rough": 0.8}), x, 0.15, z, g).scale = Vector3(0.35, 0.25, 0.3)
+				dn = Gfx.mesh(pebble, Gfx.mat(0xaab3bd, {"rough": 0.8}), x, 0.15, z, g)
+				dn.scale = Vector3(0.35, 0.25, 0.3)
 			else:
-				Gfx.mesh(bush, Gfx.foliage(0x3fbf6f if k % 2 else 0x55d07f, 0.05), x, 0.25, z, g).scale = Vector3(0.5, 0.38, 0.45)
+				dn = Gfx.mesh(bush, Gfx.foliage(0x3fbf6f if k % 2 else 0x55d07f, 0.05), x, 0.25, z, g)
+				dn.scale = Vector3(0.5, 0.38, 0.45)
+			decos.append([dn, p, x, z])
 		if p % 2 == 0:
 			var t := Gfx.tree(2.4)
 			t.position = Vector3(-5.3, 0, 5.3)
 			g.add_child(t)
+			decos.append([t, p, -5.3, 5.3])
 		ctx.world.add_child(g)
 		var ring := Gfx.mesh(Shapes.torus(1.0, 0.012, 72, 6), Gfx.flat(0xff2a6d), ctr.x, 0.12, ctr.z, ctx.world, false)
 		ring.visible = false
@@ -289,7 +581,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 
 func colliders(_t: float) -> Array:
 	if dirty:
-		cols = MortarShared.colliders(n, blocks, my_plot)
+		cols = MortarShared.colliders(n, blocks, my_plot, holes)
 		dirty = false
 	return cols
 
@@ -322,18 +614,16 @@ func on_message(m: Dictionary) -> void:
 				ctx.sfx.remove()
 		"shell":
 			var kind: String = m["kind"]
-			var radius := 0.24
-			if kind == "mega":
-				radius = 0.42
-			elif kind == "sub":
-				radius = 0.16
-			var shell := Gfx.mesh(Shapes.sphere(radius, 18, 12), Gfx.mat(SHELL_COLOR[kind], {"rough": 0.2, "metal": 0.5}), 0, 0, 0, ctx.world)
-			# mèche incandescente, bien visible de loin grâce au halo lumineux
-			Gfx.mesh(Shapes.sphere(0.4, 8, 6), Gfx.mat(0xffb703, {"glow": 3.0}), 0, 1, 0, shell, false)
-			shell.position = _v3(m["p"])
-			shells[int(m["id"])] = {"mesh": shell, "p": m["p"], "v": m["v"], "at": m["at"], "kind": kind}
+			var sh := _make_missile(kind)
+			sh.merge({"p": m["p"], "v": m["v"], "at": m["at"], "kind": kind, "roll": randf() * TAU})
+			shells[int(m["id"])] = sh
+			_update_missile(sh, ctx.now())
+			var p0 := _v3(m["p"])
 			if kind != "sub":
 				ctx.sfx.fire()
+				# bouffée de départ au bout du tube
+				ctx.particles.burst(p0, 10, FIRE, 3.0, 0.14, 0.3, 0.0, 0.6)
+				ctx.particles.burst(p0, 6, SMOKE, 1.5, 0.22, 0.9, -0.5, 0.6)
 		"bounce":
 			var sh: Variant = shells.get(int(m["id"]))
 			if sh != null:
@@ -344,10 +634,13 @@ func on_message(m: Dictionary) -> void:
 		"gone", "boom":
 			var id := int(m["id"])
 			if shells.has(id):
-				shells[id]["mesh"].queue_free()
+				shells[id]["root"].queue_free()
 				shells.erase(id)
 			if m["t"] == "boom":
-				_explosion(_v3(m["p"]), m["r"], m["kind"])
+				var dug: Array = m.get("holes", [])
+				# un trou a déjà son bord brûlé : pas de trace au sol par-dessus
+				_explosion(_v3(m["p"]), m["r"], m["kind"], dug.is_empty())
+				_dig(dug, _v3(m["p"]))
 				_remove_blocks(m["removed"], _v3(m["p"]))
 		"hp":
 			hp[m["id"]] = m["hp"]
@@ -458,10 +751,8 @@ func on_frame(dt: float) -> void:
 
 	# ----- obus, éclairs, caisses, zone -----
 	for sh: Dictionary in shells.values():
-		var p := MortarShared.shell_at(sh["p"], sh["v"], t - sh["at"])
-		sh["mesh"].position = p
-		if randf() < 0.6:
-			ctx.particles.emit(p.x, p.y, p.z, 0, 0.5, 0, 0xdee2e6 if sh["kind"] == "normal" else SHELL_COLOR[sh["kind"]], 0.13, 0.5, -1.0)
+		_update_missile(sh, t)
+	_update_fx(dt)
 	for i in range(flashes.size() - 1, -1, -1):
 		var f: Dictionary = flashes[i]
 		f["life"] -= dt
@@ -536,6 +827,10 @@ func on_frame(dt: float) -> void:
 
 
 func on_exit() -> void:
+	for e: Dictionary in fx:
+		if is_instance_valid(e["node"]):
+			e["node"].queue_free()
+	fx.clear()
 	for tube: Node in tubes:
 		if is_instance_valid(tube):
 			tube.queue_free()

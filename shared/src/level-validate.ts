@@ -95,7 +95,8 @@ function makeNode(e: LevelElement, i: number): Node | null {
     n.topMin = Math.min(...n.parts.map((p) => p.topMin)); n.topMax = Math.max(...n.parts.map((p) => p.topMax));
     return n;
   }
-  if (e.type === 'fan') {
+  if (e.type === 'fan' || e.type === 'wind') {
+    // rafales vers le haut assez fortes (au plus fort) : colonne d'air où l'on vole, comme un ventilateur
     if (e.force[1] <= PHYS.gravity + 4) return null; // ventilateur latéral ou trop faible : simple perturbation
     n.fan = true;
     n.bottom = e.pos[1] - e.size[1] / 2;

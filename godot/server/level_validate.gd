@@ -153,8 +153,9 @@ static func _make_node(e: Dictionary, i: int) -> VNode:
 			n.top_min = minf(n.top_min, p.top_min)
 			n.top_max = maxf(n.top_max, p.top_max)
 		return n
-	if type == "fan":
-		var force: Array = e.get("force", [0.0, 42.0, 0.0])
+	if type == "fan" or type == "wind":
+		# rafales vers le haut assez fortes (au plus fort) : colonne d'air où l'on vole, comme un ventilateur
+		var force: Array = e.get("force", [0.0, 42.0, 0.0] if type == "fan" else [24.0, 0.0, 0.0])
 		if force[1] <= Phys.GRAVITY + 4.0:
 			return null  # ventilateur latéral ou trop faible : simple perturbation
 		n.fan = true

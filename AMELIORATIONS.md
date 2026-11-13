@@ -6,7 +6,7 @@ Liste des corrections et améliorations à faire.
 
 - [ ] **Points** : le barème actuel ne va pas. Voir s'il vaut mieux donner seulement 3 points au 1er, 2 au 2e,
   1 au 3e, et rien aux autres.
-- [ ] **Fin de partie** : le passage d'un jeu à l'autre prend trop de temps. Chaque joueur devrait pouvoir passer
+- [x] **Fin de partie** : le passage d'un jeu à l'autre prend trop de temps. Chaque joueur devrait pouvoir passer
   au jeu suivant lui-même, mais le nouveau jeu ne démarre que quand tout le monde est là.
 
 ## Abri & mortier

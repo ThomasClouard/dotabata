@@ -43,6 +43,8 @@ var _my_yaw := 0.0
 var _acc := 0.0
 var _send_acc := 0.0
 var _last_count := -1
+var _scores_at := 0.0  # arrivée de l'écran des scores (évite qu'un saut en fin de manche le passe)
+var _sent_next := false
 var _cam_target := Vector3(0, 1.5, 0)
 var _address := ""
 var _password := ""
@@ -94,6 +96,7 @@ func _ready() -> void:
 	ui.start_pressed.connect(func() -> void: net.send({"t": "start"}))
 	ui.stop_pressed.connect(func() -> void: net.send({"t": "stop"}))
 	ui.to_lobby_pressed.connect(func() -> void: net.send({"t": "toLobby"}))
+	ui.next_pressed.connect(_send_next)
 	var menu := ui.menu
 	menu.join_requested.connect(_join)
 	menu.create_requested.connect(_create_server)
@@ -470,6 +473,15 @@ func _enter_lobby() -> void:
 	ui.hide_banner()
 
 
+## Passer au jeu suivant (une seule fois par écran de scores).
+func _send_next() -> void:
+	if _phase != "scores" or _sent_next:
+		return
+	_sent_next = true
+	ui.mark_ready()
+	net.send({"t": "next"})
+
+
 func _is_host() -> bool:
 	return _lobby != null and _lobby["hostId"] == my_id
 
@@ -558,6 +570,11 @@ func _on_message(m: Dictionary) -> void:
 			input.release_mouse()
 			ui.show_scores(m, _lobby["players"] if _lobby != null else [], my_id, _meta(m["gameId"])["name"])
 			ui.hide_banner()
+			_scores_at = net.now()
+			_sent_next = false
+		"ready":
+			if _phase == "scores":
+				ui.show_ready(m["ids"], m["need"], my_id)
 		"podium":
 			_phase = "podium"
 			ui.hide_overlay()
@@ -624,6 +641,8 @@ func _process(delta: float) -> void:
 	_debug.drive(dt)
 	if _phase == "lobby" and input.hit("PadPanel"):
 		ui.enter_pad_nav()
+	if _phase == "scores" and t > _scores_at + 1.0 and input.hit("Space", "Enter"):
+		_send_next()
 
 	if _phase == "menu":
 		_menu_frame(dt)

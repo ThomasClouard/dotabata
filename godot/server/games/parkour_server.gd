@@ -3,7 +3,7 @@ extends ServerGame
 ## Parcours délirant — autorité serveur : checkpoints, arrivées, chrono, classement, bots.
 
 ## Cibles sans surface : on y entre (ventilateur) ou elles nous emportent (canon, téléporteur, tyrolienne).
-const ZONE_TARGETS := ["fan", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]
+const ZONE_TARGETS := ["fan", "wind", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]
 const ITEM := ParkourShared.ITEM
 ## Mode « meilleur temps » : délai entre l'arrivée et le retour automatique au départ.
 const RESTART_DELAY := 3.0
@@ -819,7 +819,7 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 		var top: float = b.py if zone else (col.cy + col.hy if col else Level.top_of(el))
 		if el["type"] == "ramp":
 			top = Level.ramp_top_at(el, b.px, b.pz)  # hauteur du bord de rampe le plus proche
-		if el["type"] == "fan" and absf(b.px - el["pos"][0]) < el["size"][0] / 2.0 and absf(b.pz - el["pos"][2]) < el["size"][2] / 2.0 and b.py > el["pos"][1] + el["size"][1] / 2.0 - 2.0:
+		if (el["type"] == "fan" or el["type"] == "wind") and absf(b.px - el["pos"][0]) < el["size"][0] / 2.0 and absf(b.pz - el["pos"][2]) < el["size"][2] / 2.0 and b.py > el["pos"][1] + el["size"][1] / 2.0 - 2.0:
 			bot.path_idx += 1
 		var dx := tcx - b.px
 		var dz := tcz - b.pz

@@ -168,7 +168,11 @@ func on_player_message(id: String, msg: Dictionary) -> void:
 		"burn":
 			var sp: SP = sps.get(id)
 			if sp != null and sp.status == "fly":
-				ctx.broadcast({"t": "burn", "id": id, "on": msg.get("on") == true})
+				var d: Variant = msg.get("d")
+				var out := {"t": "burn", "id": id, "on": msg.get("on") == true}
+				if d is Array and d.size() == 3 and d.all(func(x: Variant) -> bool: return (x is float or x is int) and is_finite(x) and absf(x) <= 1.5):
+					out["d"] = d
+				ctx.broadcast(out)
 
 
 func on_player_leave(id: String) -> void:

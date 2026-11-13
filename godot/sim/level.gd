@@ -756,6 +756,12 @@ static func build_colliders(level: Dictionary, t: float, state: Dictionary = {})
 				var ph: float = (t / period + e.get("phase", 0.0)) * TAU
 				var a := amp * sin(ph)
 				var da := (amp * cos(ph) * TAU) / period
+				var strike := int(e.get("strike", 0))
+				if strike != 0:
+					# marteau qui tape : de la verticale (en haut) à l'horizontale (posé), au rythme d'une guillotine
+					var gp := gate_profile(frac(t / period + e.get("phase", 0.0)))
+					a = strike * (PI - (PI / 2.0) * gp[0])
+					da = (-strike * (PI / 2.0) * gp[1]) / period
 				var ax := 1.0 if e.get("axis", "x") == "x" else 0.0
 				var az := 1.0 - ax
 				var l: float = e.get("length", 5.0)

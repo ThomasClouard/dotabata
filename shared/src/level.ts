@@ -27,7 +27,7 @@ export const ElementSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('conveyor'), ...common, dir: v2, speed: z.number().min(0.5).max(10).default(4) }),
   z.object({ type: z.literal('crumble'), ...common, delay: z.number().min(0.2).max(3).default(0.5), respawn: z.number().min(1).max(20).default(4), skin }),
   z.object({ type: z.literal('spinner'), ...common, speed: z.number().min(-6).max(6).default(1.5), phase }),
-  z.object({ type: z.literal('hammer'), ...common, length: z.number().min(1).max(12).default(5), axis: z.enum(['x', 'z']).default('x'), amplitude: z.number().min(0.2).max(1.5).default(1.1), period: z.number().min(1).max(12).default(3), phase, skin }),
+  z.object({ type: z.literal('hammer'), ...common, length: z.number().min(1).max(12).default(5), axis: z.enum(['x', 'z']).default('x'), amplitude: z.number().min(0.2).max(1.5).default(1.1), period: z.number().min(1).max(12).default(3), phase, strike: z.number().int().min(-1).max(1).default(0), skin }),
   z.object({ type: z.literal('fan'), ...common, force: v3.default([0, 42, 0]) }),
   z.object({ type: z.literal('cannon'), ...common, dir: v2, stroke: z.number().min(0.5).max(10).default(3), period: z.number().min(1).max(12).default(3), phase }),
   // —— vague 1 : obstacles et sols horlogers, décor ——
@@ -661,7 +661,13 @@ export function buildColliders(level: Level, t: number, state?: Map<number, numb
         break;
       case 'hammer': {
         const ph = (t / e.period + e.phase) * TAU;
-        const a = e.amplitude * Math.sin(ph), da = (e.amplitude * Math.cos(ph) * TAU) / e.period;
+        let a = e.amplitude * Math.sin(ph), da = (e.amplitude * Math.cos(ph) * TAU) / e.period;
+        if (e.strike !== 0) {
+          // marteau qui tape : de la verticale (en haut) à l'horizontale (posé), au rythme d'une guillotine
+          const [g, dg] = gateProfile(frac(t / e.period + e.phase));
+          a = e.strike * (Math.PI - (Math.PI / 2) * g);
+          da = (-e.strike * (Math.PI / 2) * dg) / e.period;
+        }
         const ax = e.axis === 'x' ? 1 : 0, az = 1 - ax, L = e.length;
         col.c = [c[0] + ax * Math.sin(a) * L, c[1] - Math.cos(a) * L, c[2] + az * Math.sin(a) * L];
         col.vel = [ax * Math.cos(a) * L * da, Math.sin(a) * L * da, az * Math.cos(a) * L * da];
@@ -787,7 +793,7 @@ export function elementCatalog() {
       { type: 'conveyor', description: 'Tapis roulant qui entraîne le joueur.', params: { dir: '[x, z] direction', speed: 'm/s 0.5–10 (défaut 4)' } },
       { type: 'crumble', description: 'Dalle qui s\'effondre après qu\'on a marché dessus, puis réapparaît.', params: { delay: 'secondes avant la chute (défaut 0.5)', respawn: 'secondes avant le retour (défaut 4)', skin: SKIN_DOC + ' ; "cloud" : le nuage se dissout au lieu de tomber' } },
       { type: 'spinner', description: 'Barre tournante (obstacle) : `size` est la taille de la barre, elle tourne autour de son centre. La placer 0.3–0.6 m au-dessus d\'une plateforme pour qu\'on doive sauter par-dessus.', params: { speed: 'rad/s, -6 à 6 (défaut 1.5)', phase: '0–1' } },
-      { type: 'hammer', description: 'Marteau pendule : `pos` est le pivot, `size` la tête, qui passe au plus bas à pos.y - length.', params: { length: 'longueur du bras 1–12 (défaut 5)', axis: '"x" ou "z" : direction du balancement', amplitude: 'angle max en radians 0.2–1.5 (défaut 1.1)', period: 'secondes (défaut 3)', phase: '0–1', skin: '"mallet" : gros maillet en bois' } },
+      { type: 'hammer', description: 'Marteau pendule : `pos` est le pivot, `size` la tête, qui passe au plus bas à pos.y - length.', params: { length: 'longueur du bras 1–12 (défaut 5)', axis: '"x" ou "z" : direction du balancement', amplitude: 'angle max en radians 0.2–1.5 (défaut 1.1)', period: 'secondes (défaut 3)', phase: '0–1', strike: '0 (pendule, défaut) ; 1 ou -1 : marteau qui tape — le bras part de la verticale au-dessus du pivot et s\'abat à l\'horizontale vers +axe (1) ou -axe (-1), au rythme d\'une guillotine (amplitude ignorée). Poser le pivot au bord de la table, à la hauteur du centre de la tête une fois posée.', skin: '"mallet" : gros maillet en bois' } },
       { type: 'fan', description: 'Ventilateur : `pos`/`size` décrivent la zone de souffle (pas de collision). Avec force.y > 24 (la gravité) il soulève le joueur jusqu\'en haut de la zone.', params: { force: '[x, y, z] accélération en m/s² (défaut [0, 42, 0])' } },
       { type: 'cannon', description: 'Canon pousseur : bloc qui jaillit périodiquement de `stroke` mètres dans la direction `dir` et éjecte les joueurs.', params: { dir: '[x, z]', stroke: 'course 0.5–10 (défaut 3)', period: 'secondes (défaut 3)', phase: '0–1' } },
       { type: 'roller', description: 'Rouleau broyeur : cylindre couché d\'axe x local, size = [longueur, diamètre, diamètre]. On peut marcher dessus ; le dessus entraîne le joueur perpendiculairement à l\'axe (vers +z local si speed > 0, comme un tapis). Pour traverser une rangée de rouleaux, orienter leur axe en travers du chemin.', params: { speed: 'vitesse de surface m/s, -8 à 8 (défaut 3) ; le signe donne le sens' } },

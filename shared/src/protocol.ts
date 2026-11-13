@@ -54,6 +54,8 @@ export type ClientMsg =
   | { t: 'start' }
   | { t: 'stop' }
   | { t: 'toLobby' }
+  /** Écran des scores : « Jeu suivant ». */
+  | { t: 'next' }
   | { t: 'state'; s: [number, number, number, number, number, number, number, number] }
   | { t: 'game'; m: any };
 
@@ -63,6 +65,8 @@ export type ServerMsg =
   | { t: 'lobby'; phase: Phase; players: PlayerInfo[]; hostId: string; settings: SessionSettings; metas: GameMeta[]; urls: string[] }
   | { t: 'round'; index: number; total: number; gameId: string; init: any; spawns: Record<string, Vec3>; startAt: number }
   | { t: 'roundEnd'; gameId: string; index: number; total: number; results: RoundResultRow[]; totals: Record<string, number>; last: boolean }
+  /** Écran des scores : joueurs prêts (`ids`) parmi ceux qu'on attend (`need`). Tous prêts : la suite démarre. */
+  | { t: 'ready'; ids: string[]; need: string[] }
   | { t: 'podium'; totals: Record<string, number> }
   | { t: 'wait' }
   | { t: 'states'; s: StateTuple[] }

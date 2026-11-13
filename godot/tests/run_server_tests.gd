@@ -359,6 +359,40 @@ func _test_session_rules() -> void:
 	var cfg := Session._clean_server_cfg({"name": "  <Salle>\n ", "max": 99, "password": 3}, {"name": "x", "max": 6, "password": "pw"})
 	_eq(cfg, {"name": "Salle", "max": Protocol.MAX_PLAYERS, "password": "pw"}, "réglages du serveur nettoyés")
 	print("règles de session : OK")
+	_test_next_round()
+
+
+## Écran des scores : la manche suivante démarre quand tous les joueurs ont cliqué « Jeu suivant ».
+func _test_next_round() -> void:
+	var s := Session.new()
+	var a := s._add_player("A", null, null, false)
+	var b := s._add_player("B", null, null, false)
+	var c := s._add_player("C", null, null, false)
+	s._add_player("Bot", null, null, true)
+	s.rounds = ["parkour", "parkour", "parkour"]
+	s.round_index = 0
+	s._start_round()
+	_eq(s.phase, "round", "manche 1 lancée")
+	s._end_round()
+	_eq(s.phase, "scores", "écran des scores")
+	s.on_message(a, {"t": "next"})
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	_eq(s.phase, "scores", "on attend encore C (le bot ne compte pas)")
+	s.on_message(c, {"t": "next"})
+	_ok(s.phase == "round" and s.round_index == 1, "tout le monde prêt : manche 2")
+	s.on_message(a, {"t": "next"})  # hors écran des scores : ignoré
+	s._end_round()
+	_ok(s.ready.is_empty(), "prêts remis à zéro à chaque écran des scores")
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	s._remove_player(c.id)
+	_ok(s.phase == "round" and s.round_index == 2, "le joueur attendu part : on enchaîne")
+	s._end_round()
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	_eq(s.phase, "podium", "dernière manche : podium")
+	print("jeu suivant : OK")
 
 
 # ---------- parcours : modes, recommencer, arrivée ----------

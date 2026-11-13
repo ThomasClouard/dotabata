@@ -153,6 +153,25 @@ func build(e: Dictionary, i: int) -> Node3D:
 			rec["rods"] = rods
 			rec["anchors"] = anchors
 			rec["dir"] = Vector3(sin(yaw), 0, cos(yaw))
+		"gate" when e.get("skin", "") == "mallet":
+			# maillet qui tape : tête en bois (la boîte), manche vers le haut, qui tombe comme une guillotine
+			root = _root(e)
+			var head := _free(Node3D.new())
+			var r := minf(sy, sz) / 2.0
+			var cyl := Gfx.mesh(Shapes.cylinder(r, r, sx, 24), Gfx.mat(0xffffff, {"map": Tex.planks(), "uv": Vector2(1, 2), "rough": 0.6}), 0, 0, 0, head)
+			cyl.rotation.z = PI / 2.0
+			for s in [-1.0, 1.0]:
+				var cap := Gfx.mesh(Shapes.cylinder(r * 1.08, r * 1.08, 0.22, 24), Gfx.mat(0x8a5a33, {"rough": 0.4}), s * (sx / 2.0 - 0.1), 0, 0, head)
+				cap.rotation.z = PI / 2.0
+			var handle_h := maxf(3.0, e.get("drop", 3.0) + 1.5)
+			Gfx.mesh(Shapes.cylinder(0.2, 0.24, handle_h, 12), Gfx.mat(0xd9a066, {"rough": 0.6}), 0, r + handle_h / 2.0, 0, head)
+			Gfx.mesh(Shapes.sphere(0.3, 12, 8), Gfx.mat(0xe63946, {"rough": 0.4}), 0, r + handle_h, 0, head)
+			rec["blade"] = head
+			rec["edge"] = Gfx.mat(0xffffff)
+			rec["ropes"] = []
+			rec["top"] = _v(e).y
+			rec["mallet"] = true
+			rec["was_down"] = false
 		"gate":
 			root = _root(e)
 			var drop: float = e.get("drop", 3.0)
@@ -618,6 +637,17 @@ func update(t: float, dt: float) -> void:
 				_place(blade, c)
 				# le liseré rouge s'allume juste avant la chute
 				var until := Level.gate_until_fall(e, t)
+				if rec.has("mallet"):
+					# au moment où le maillet touche : poussière, et un « bonk » si on est près
+					var down: bool = Level.gate_profile(Level.frac(t / e.get("period", 4.0) + e.get("phase", 0.0)))[0] >= 0.999
+					if down and not rec["was_down"]:
+						var hit := blade.position - Vector3(0, c.hy, 0)
+						ctx.particles.burst(hit, 12, [0xe0c9a6, 0xc9a27e, 0xffffff], 4.0, 0.12, 0.5)
+						if Vector3(ctx.body.px, ctx.body.py, ctx.body.pz).distance_to(hit) < 12.0:
+							ctx.sfx.boom(0.25)
+							ctx.shake(0.12)
+					rec["was_down"] = down
+					continue
 				var edge: StandardMaterial3D = rec["edge"]
 				edge.emission_energy_multiplier = 2.5 if until == 0.0 else (1.5 + sin(t * 30.0) * 1.2 if until < 0.8 else 0.01)
 				var yaw: float = e.get("yaw", 0.0)

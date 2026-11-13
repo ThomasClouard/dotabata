@@ -242,23 +242,39 @@
       "chance": 0.5
     },
     {
-      "id": "maillet",
-      "type": "hammer",
+      "id": "maillet-gauche",
+      "type": "gate",
       "skin": "mallet",
       "pos": [
-        0,
-        8.2,
-        76
+        -3,
+        3.8,
+        73
       ],
       "size": [
         2.6,
         1.6,
         1.6
       ],
-      "length": 6.8,
-      "axis": "x",
-      "amplitude": 1,
-      "period": 3.2
+      "drop": 3,
+      "period": 2.6
+    },
+    {
+      "id": "maillet-droit",
+      "type": "gate",
+      "skin": "mallet",
+      "pos": [
+        3,
+        3.8,
+        75
+      ],
+      "size": [
+        2.6,
+        1.6,
+        1.6
+      ],
+      "drop": 3,
+      "period": 2.6,
+      "phase": 0.5
     },
     {
       "type": "sign",

@@ -21,7 +21,7 @@ Liste des corrections et améliorations à faire.
 ## Saut cosmique
 
 - [ ] **Planètes** : mettre les premières planètes plus loin.
-- [ ] **Zoom** : il y a un problème quand on passe en zoom.
+- [x] **Zoom** : il y a un problème quand on passe en zoom.
 - [ ] **Dérive** : elle dure trop longtemps. Quand on a raté son saut, on doit perdre rapidement.
 - [ ] **Recommencer** : voir s'il faut ajouter un mode qui permet de réessayer quand on se rate.
 - [x] **Position en vol** : le personnage plane sur le dos. Je préfère qu'il soit sur le ventre.

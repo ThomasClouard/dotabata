@@ -22,7 +22,7 @@ var _deadline := 0.0
 
 
 func local() -> float:
-	return Time.get_ticks_usec() / 1e6
+	return Config.ticks_usec() / 1e6
 
 
 ## Horloge serveur synchronisée, en secondes.

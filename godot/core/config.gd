@@ -15,6 +15,21 @@ static var server := ""
 ## Réglages du serveur qu'on héberge (nom, joueurs max, mot de passe), mémorisés pour la fois suivante.
 static var server_cfg := {"name": "", "max": Protocol.MAX_PLAYERS, "password": ""}
 static var args := {}
+static var _movie_fps := -1.0
+
+
+## Horloge (µs) : le temps réel, ou, pendant l'enregistrement d'une vidéo (--write-movie), le temps des images. Les
+## images d'une vidéo ne sont pas produites en temps réel : sans cela, les obstacles avanceraient trop vite ou trop lentement.
+static func ticks_usec() -> int:
+	if _movie_fps < 0.0:
+		_movie_fps = 0.0
+		var a := OS.get_cmdline_args()
+		if a.has("--write-movie"):
+			var i := a.find("--fixed-fps")
+			_movie_fps = float(a[i + 1]) if i >= 0 and i + 1 < a.size() else 60.0
+	if _movie_fps > 0.0:
+		return int(Engine.get_process_frames() * 1e6 / _movie_fps)
+	return Time.get_ticks_usec()
 ## Options du menu : plein écran, volume des effets (0 à 1), sensibilité de la souris (facteur).
 static var fullscreen := false
 static var sfx_volume := 0.8

@@ -11,6 +11,7 @@ import {
   spinAngle, crusherGap, blinkState, boulderBalls, elementBottom, fogAt, HITTERS,
   inZone, rampSlope, rampTopAt, rampCorners, boostVel, jumppadVel, launchVelocity, ballisticPoint, launcherArc, zipCable, zipFeet,
   bubbleParts, windGust, windAccel, lowgravAt,
+  hash01, popperState, geyserState, rockfallStones,
   newLevelState, linkOpen, doorOpenness, leverDown, boxReady, memoryKey, memoryTiles, memoryTileAt, standsOn, touches,
 } from '../../shared/src/level.ts';
 import { readLevel, listLevels, LEVELS_DIR } from '../../shared/src/level-store.ts';
@@ -130,10 +131,11 @@ function inputs(steps) {
   fs.writeFileSync(path.join(OUT, 'levels.json'), JSON.stringify({ levels, times: [0, 9.96, 59.94, 61.5, 125.25].map((s) => ({ s, text: formatTime(s) })) }));
 }
 
-// ---------- vague 1 : niveau d'essai avec tous les nouveaux types (tests/fixtures/parkour/vague1.json) ----------
-{
-  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures', 'parkour', 'vague1.json');
-  const raw = { ...JSON.parse(fs.readFileSync(file, 'utf8')), name: 'vague1' };
+// ---------- vague 1 (et 4) : niveau d'essai avec tous les nouveaux types (tests/fixtures/parkour/<name>.json) ----------
+waveLevel('vague1');
+function waveLevel(name) {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tests', 'fixtures', 'parkour', name + '.json');
+  const raw = { ...JSON.parse(fs.readFileSync(file, 'utf8')), name };
   const level = LevelSchema.parse(raw);
   // boîtes à de nombreux instants (toutes les phases des cycles : chute de guillotine, dalles absentes, plusieurs boules…)
   const times = [];
@@ -154,6 +156,9 @@ function inputs(steps) {
       if (e.type === 'blink') o.blink = blinkState(e, t);
       if (e.type === 'boulder') o.balls = boulderBalls(e, t).map((b) => ({ c: b.c, k: b.k, roll: b.roll }));
       if (e.type === 'puncher') o.pulse = cannonPulse(frac(t / e.period + e.phase));
+      if (e.type === 'popper') o.pop = Array.from({ length: e.cols * e.rows }, (_, k) => popperState(e, k, t, i));
+      if (e.type === 'geyser') o.geyser = geyserState(e, t);
+      if (e.type === 'rockfall') o.stones = rockfallStones(e, t, i).map((s) => ({ c: s.c, k: s.k, f: s.f, x: s.x, z: s.z }));
       r.els.push(o);
     });
     pure.push(r);
@@ -230,8 +235,9 @@ function inputs(steps) {
       }
     }
   });
-  fs.writeFileSync(path.join(OUT, 'vague1.json'), JSON.stringify({ level, raw, snapshots, pure, bottoms, fog, killY, cpIdx, inputs: inp, states, knocks, bounces, kills, falls, drops }));
-  console.log(`vague1 : course ${knocks} éjections, ${kills} morts (lave), ${falls} chutes, checkpoint final ${cp}`);
+  const hashes = [[0, 0], [1, 2], [7, -3], [-5, 11], [1234, 98765], [64 * 40 + 3, 4321], [-1, -1]].map(([a, b]) => [a, b, hash01(a, b)]);
+  fs.writeFileSync(path.join(OUT, name + '.json'), JSON.stringify({ level, raw, snapshots, pure, bottoms, fog, killY, cpIdx, inputs: inp, states, knocks, bounces, kills, falls, drops, hashes }));
+  console.log(`${name} : course ${knocks} éjections, ${kills} morts (lave), ${falls} chutes, checkpoint final ${cp}`);
 }
 
 // ---------- mortier : géométrie de l'arène et balistique ----------
@@ -572,3 +578,6 @@ function inputs(steps) {
 }
 
 console.log('Vecteurs de référence écrits dans', OUT);
+
+// ---------- vague 4 : castors, jets de lave, chutes de pierres, apparences (tests/fixtures/parkour/vague4.json) ----------
+waveLevel('vague4');

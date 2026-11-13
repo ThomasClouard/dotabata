@@ -101,6 +101,7 @@ static var _bowl_mesh: Mesh
 
 var dead := false
 var hanging := false  # suspendu à une tyrolienne : bras tendus vers le câble, jambes ballantes
+var balancing := false  # sur un fil (étendoir) : bras écartés en balancier, pieds sur la ligne, buste qui tangue
 
 var _squash := Node3D.new()
 var _pivot := Node3D.new()
@@ -800,7 +801,8 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 		var hgt: float = sp["y1"] - sp["y0"]
 		var bob := absf(sin(ph)) * 0.07 * k if grounded else 0.0
 		_pivot.position.y = CENTER + bob + dn * absf(sin(_time * 7.0)) * 0.12
-		_pivot.rotation = Vector3(k * 0.16 + _spin, 0, sin(ph) * 0.12 * k + dn * sin(_time * 7.0) * 0.2)
+		var wobble := sin(_time * 2.3) * 0.13 + sin(_time * 5.1) * 0.04 if balancing and grounded else 0.0
+		_pivot.rotation = Vector3(k * 0.16 + _spin, 0, sin(ph) * 0.12 * k + dn * sin(_time * 7.0) * 0.2 + wobble)
 		var hat_rot := Vector3(sin(ph * 2.0) * 0.06 * k - clampf(az * 0.003, -0.2, 0.2), 0.0, clampf(ax * 0.003, -0.2, 0.2))
 
 		# corps mou : le haut traîne derrière les accélérations, se penche en courant, se dandine à chaque pas,
@@ -852,6 +854,10 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 					target = Vector3(s * lx, fy + 0.05 + maxf(0.0, sin(_time * 6.0 + s * 1.3)) * 0.12, sin(_time * 5.0 + s) * 0.18 - 0.05)
 				elif tumble:
 					target = Vector3(s * 0.3, 0.3 + sin(_time * 15.0 + s) * 0.2, cos(_time * 13.0 + s) * 0.3)
+				elif grounded and balancing:
+					# pas d'équilibriste : un pied devant l'autre, sur la ligne
+					var lift := maxf(0.0, sin(lp))
+					target = Vector3(s * 0.05, fy + lift * 0.2 * k * sd, -cos(lp) * 0.3 * k * sd)
 				elif grounded:
 					var lift := maxf(0.0, sin(lp))
 					# pied qui se lève en s'écartant un peu (dandinement), et qui traîne derrière le corps
@@ -868,6 +874,9 @@ func update(dt: float, speed: float, vy: float, grounded: bool, tumble: bool, ch
 					target = Vector3(s * 0.55, sy + 0.5 + sin(_time * 7.0 + s * 1.5) * 0.25, 0.1)
 				elif charging:
 					target = Vector3(s * 0.2, sy - 0.05, 0.5)
+				elif balancing:
+					# balancier : bras tendus à l'horizontale, qui basculent l'un contre l'autre
+					target = Vector3(s * 0.88, sy + 0.12 + s * sin(_time * 2.3) * 0.22, 0.05)
 				elif not grounded and vy < -3.0:
 					# chute : les bras moulinent
 					var w := _time * 16.0 + s * 1.6

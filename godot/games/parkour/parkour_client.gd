@@ -35,6 +35,7 @@ var _frame_cols: Array = []
 var props: ParkourProps  # éléments de la vague 1, arches, confettis, brouillard
 var props2: ParkourProps2  # éléments de la vague 2 (sols spéciaux, propulseurs), joueurs suspendus
 var props3: ParkourProps3  # éléments de la vague 3 (interactions, objets, pièces), HUD de l'objet
+var skins: ParkourSkins  # vague 4 : apparences (skin), castors, jets de lave, chutes de pierres, nouveaux décors
 var finish_tops: Array = []  # [haut de l'arche d'arrivée (monde), largeur]
 var best_mode := false  # mode « meilleur temps » : on refait le parcours autant qu'on veut
 var run_start := 0.0  # début de l'essai en cours (horloge serveur)
@@ -57,12 +58,16 @@ func _build(e: Dictionary, i: int) -> Node3D:
 	var sz: float = e["size"][2]
 	var pos := Vector3(e["pos"][0], e["pos"][1], e["pos"][2])
 	var yaw: float = e.get("yaw", 0.0)
+	var own := skins.build(e, i)  # rendu entièrement pris en charge par la vague 4
+	if own != null:
+		return own
+	var body := skins.body(e, i)  # corps habillé d'une dalle (null sans skin)
 	match e["type"]:
 		"platform":
 			var color: int = Gfx.to_int(Color(e["color"])) if e.get("color") != null else PASTELS[i % PASTELS.size()]
-			return _put(e, Gfx.slab(sx, sy, sz, color, {"seed": i}))
+			return _put(e, body if body else Gfx.slab(sx, sy, sz, color, {"seed": i}))
 		"start":
-			var g := _put(e, Gfx.slab(sx, sy, sz, 0x8ecbff, {"top": 0xffffff, "top_map": Tex.soft("#ffffff", "#cfe8ff"), "top_uv": Vector2(sx / 4.0, sz / 4.0), "seed": i}))
+			var g := _put(e, body if body else Gfx.slab(sx, sy, sz, 0x8ecbff, {"top": 0xffffff, "top_map": Tex.soft("#ffffff", "#cfe8ff"), "top_uv": Vector2(sx / 4.0, sz / 4.0), "seed": i}))
 			# arche gonflable « DÉPART » sur le bord tourné vers le premier objectif
 			var tgt: Variant = _next_target()
 			if tgt != null:
@@ -82,7 +87,14 @@ func _build(e: Dictionary, i: int) -> Node3D:
 				Gfx.mesh(Shapes.rbox(0.8, 0.5, 0.05, 0.02), Gfx.mat(0xff4d6d if c[0] * c[1] > 0.0 else 0xffd60a), x - c[0] * 0.42, sy / 2.0 + 2.1, z, g)
 			return g
 		"finish":
-			var g := _put(e, Gfx.slab(sx, sy, sz, 0xffd60a, {"top": 0xffffff, "top_map": Tex.checker("#ffffff", "#2b2140"), "top_uv": Vector2(sx / 2.0, sz / 2.0), "seed": i}))
+			var g := _put(e, body if body else Gfx.slab(sx, sy, sz, 0xffd60a, {"top": 0xffffff, "top_map": Tex.checker("#ffffff", "#2b2140"), "top_uv": Vector2(sx / 2.0, sz / 2.0), "seed": i}))
+			if e.get("skin", "") == "heli":
+				# hélicoptère : pas d'arche (le rotor est au-dessus), une bannière à l'arrière du toit
+				finish_tops.append([g.to_global(Vector3(0, sy / 2.0 + 3.0, 0)), minf(sx, sz)])
+				var ban := Gfx.board("ARRIVÉE", minf(4.5, sx * 0.8), 0.9, "#2b2140", "#ffd60a")
+				ban.position = Vector3(0, sy / 2.0 + 0.9, -sz / 2.0 + 0.3)
+				g.add_child(ban)
+				return g
 			# arche gonflable rayée + bannière
 			var r := sx / 2.0 - 0.5
 			props.inflatable_arch(g, r, 0, sy / 2.0, -sz / 2.0 + 0.8, 0.0, "ARRIVÉE", ["#ff4d6d", "#ffd60a"])
@@ -93,7 +105,7 @@ func _build(e: Dictionary, i: int) -> Node3D:
 				g.add_child(b)
 			return g
 		"checkpoint":
-			var g := _put(e, Gfx.slab(sx, sy, sz, 0x52d681, {"top": 0xffffff, "top_map": Tex.soft("#7be495", "#a2f0b5"), "top_uv": Vector2(sx / 3.0, sz / 3.0), "seed": i}))
+			var g := _put(e, body if body else Gfx.slab(sx, sy, sz, 0x52d681, {"top": 0xffffff, "top_map": Tex.soft("#7be495", "#a2f0b5"), "top_uv": Vector2(sx / 3.0, sz / 3.0), "seed": i}))
 			# portique en anneau qui s'allume à la couleur du joueur quand il est validé
 			var ring_mat := Gfx.mat(0xdde3ea, {"rough": 0.3})
 			Gfx.mesh(Shapes.torus_arc(minf(sx, 5.0) / 2.0 - 0.3, 0.2, 12, 36, PI), ring_mat, 0, sy / 2.0, 0, g)
@@ -105,6 +117,8 @@ func _build(e: Dictionary, i: int) -> Node3D:
 			Gfx.mesh(Shapes.rbox(sx * 0.9, sy * 0.5, sz * 0.9, 0.15), Gfx.mat(0xffffff, {"rough": 0.1, "opacity": 0.55}), 0, 0, 0, m, false)
 			return m
 		"moving":
+			if body:
+				return _put(e, body)
 			var g := _put(e, Gfx.slab(sx, sy, sz, 0x9d4edd, {"under": false}))
 			# dessous lumineux : on voit de loin que la plateforme bouge
 			Gfx.mesh(Shapes.rbox(sx * 0.7, 0.14, sz * 0.7, 0.07), Gfx.mat(0x5ef2ff, {"glow": 2.2}), 0, -sy / 2.0 - 0.05, 0, g)
@@ -146,6 +160,8 @@ func _build(e: Dictionary, i: int) -> Node3D:
 			arrows.append({"el": e, "meshes": meshes, "len": length, "dir": dir})
 			return g
 		"crumble":
+			if body:
+				return _put(e, body)
 			return _put(e, Gfx.slab(sx, sy, sz, 0xe09f3e, {"top": 0xffffff, "top_map": Tex.cracks("#f0b458"), "under": false}))
 		"spinner":
 			var g := _put(e, Node3D.new())
@@ -162,12 +178,14 @@ func _build(e: Dictionary, i: int) -> Node3D:
 			var on_x: bool = e.get("axis", "x") == "x"
 			var r := minf(sx, minf(sy, sz)) / 2.0
 			var rot := Vector3(0.0 if on_x else PI / 2.0, 0, PI / 2.0 if on_x else 0.0)
-			var head := Gfx.mesh(Shapes.cylinder(r, r, sx if on_x else sz, 24), Gfx.mat(0xe5383b, {"rough": 0.3}), 0, 0, 0, g)
+			var mallet: bool = e.get("skin", "") == "mallet"  # gros maillet en bois (parcours de la maison)
+			var head_mat := Gfx.mat(0xffffff, {"map": Tex.planks(), "uv": Vector2(1, 2), "rough": 0.6}) if mallet else Gfx.mat(0xe5383b, {"rough": 0.3})
+			var head := Gfx.mesh(Shapes.cylinder(r, r, sx if on_x else sz, 24), head_mat, 0, 0, 0, g)
 			head.rotation = rot
 			for s in [-1.0, 1.0]:
-				var cap := Gfx.mesh(Shapes.cylinder(r * 1.08, r * 1.08, 0.22, 24), Gfx.mat(0xffd60a, {"rough": 0.3}), s * (sx / 2.0 - 0.1) if on_x else 0.0, 0, 0.0 if on_x else s * (sz / 2.0 - 0.1), g)
+				var cap := Gfx.mesh(Shapes.cylinder(r * 1.08, r * 1.08, 0.22, 24), Gfx.mat(0x8a5a33 if mallet else 0xffd60a, {"rough": 0.3}), s * (sx / 2.0 - 0.1) if on_x else 0.0, 0, 0.0 if on_x else s * (sz / 2.0 - 0.1), g)
 				cap.rotation = rot
-			arms[i] = Gfx.mesh(Shapes.cylinder(0.13, 0.13, 1.0, 10), Gfx.mat(0x5c6470, {"metal": 0.6, "rough": 0.3}), 0, 0, 0, ctx.world)
+			arms[i] = Gfx.mesh(Shapes.cylinder(0.18 if mallet else 0.13, 0.18 if mallet else 0.13, 1.0, 10), Gfx.mat(0xd9a066, {"rough": 0.6}) if mallet else Gfx.mat(0x5c6470, {"metal": 0.6, "rough": 0.3}), 0, 0, 0, ctx.world)
 			# potence : une poutre au-dessus du pivot
 			Gfx.mesh(Shapes.rbox(0.5 if on_x else 3.4, 0.4, 3.4 if on_x else 0.5, 0.15), Gfx.mat(0x3d4450, {"metal": 0.4, "rough": 0.4}), pos.x, pos.y + 0.1, pos.z, ctx.world)
 			Gfx.mesh(Shapes.sphere(0.34, 14, 10), Gfx.mat(0xffd60a, {"metal": 0.3, "rough": 0.25}), pos.x, pos.y, pos.z, ctx.world)
@@ -251,6 +269,7 @@ func on_enter(c: Main, init: Variant) -> void:
 	props = ParkourProps.new(ctx, level)
 	props2 = ParkourProps2.new(ctx, level)
 	props3 = ParkourProps3.new(ctx, level, lstate)
+	skins = ParkourSkins.new(ctx, level, lstate)
 	init_msg = init
 	best_mode = init.get("mode", "first") == "best"
 	run_start = ctx.start_at
@@ -258,7 +277,7 @@ func on_enter(c: Main, init: Variant) -> void:
 		objs.append(_build(els[i], i))
 	marker = Gfx.mesh(Shapes.cylinder(0.55, 0.0, 1.1, 20), Gfx.mat(0xffd60a, {"glow": 1.2}), 0, 0, 0, ctx.world, false)
 	# mer de « slime » sous le parcours, juste au-dessus de l'altitude où l'on réapparaît
-	ctx.set_sea(kill_y + 3.0, 0xff5fb0)
+	ctx.set_sea(kill_y + 3.0, Gfx.to_int(Color(level["sea"])) if level.get("sea") != null else 0xff5fb0)
 	# ballons décoratifs le long du parcours
 	for i in els.size():
 		var e: Dictionary = els[i]
@@ -295,6 +314,7 @@ func on_exit() -> void:
 		props.restore()
 	for p: ClientPlayer in ctx.players.values():
 		p.chr.hanging = false
+		p.chr.balancing = false
 	if props3:
 		props3.clear()
 
@@ -385,7 +405,7 @@ func _death_fx(h: int, p: Vector3, flash_screen := true) -> void:
 	match style:
 		"lava":
 			ctx.sfx.boom(0.35)
-		"water":
+		"water", "floor":
 			ctx.sfx.land()
 		_:
 			ctx.sfx.crumble()
@@ -518,6 +538,17 @@ func on_frame(dt: float) -> void:
 	props.update(t, dt)
 	props2.update(t, dt)
 	props3.update(t, dt)
+	skins.update(t, dt)
+	# fil d'étendoir : pose d'équilibriste (joueur local : son sol ; autres : position sur un fil)
+	if not skins.wires.is_empty():
+		for p: ClientPlayer in ctx.players.values():
+			var bal := false
+			if p.id == ctx.my_id:
+				var gi := ctx.body.ground_id
+				bal = ctx.body.grounded and gi >= 0 and gi < els.size() and els[gi].get("skin", "") == "wire"
+			else:
+				bal = skins.on_wire(p.pos)
+			p.chr.balancing = bal
 	for i in deco.size():
 		deco[i].position.y = deco_y[i] + sin(t * 0.8 + i) * 0.35
 	fan_timer -= dt

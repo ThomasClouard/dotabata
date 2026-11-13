@@ -22,7 +22,7 @@ func _init() -> void:
 		# les bots repartent du départ après chaque arrivée : plusieurs arrivées par bot
 		var log := _test_bots("balade (meilleur temps)", LevelStore.read_level("balade"), 4, 200.0, 6, {"mode": "best"})
 		_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "finish" and m["runs"] >= 2), "meilleur temps : un bot arrivé au moins deux fois")
-	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau"]:
+	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau", "maison", "ciel", "sur-le-volcan"]:
 		if _wants(lv):
 			var need := 1 if lv in ["balade", "usine", "vertige"] else 3
 			_test_bots(lv, LevelStore.read_level(lv), 6, 260.0, need)

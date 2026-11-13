@@ -50,6 +50,9 @@ const DEFAULTS := {
 	"itembox": {"respawn": 6},
 	"coin": {},
 	"wind": {"force": [24, 0, 0], "period": 3, "phase": 0},
+	"popper": {"cols": 3, "rows": 3, "period": 2.4, "up": 0.45, "chance": 0.45, "phase": 0},
+	"geyser": {"period": 4, "on": 0.4, "phase": 0},
+	"rockfall": {"count": 2, "stone": 1, "interval": 3, "warn": 1.4, "phase": 0},
 	"start": {}, "finish": {}, "checkpoint": {}, "platform": {}, "ice": {}, "fakewall": {},
 }
 ## Champs obligatoires en plus de pos et size.
@@ -136,6 +139,8 @@ static func normalize(raw: Dictionary, err: Array = []) -> Dictionary:
 	}
 	if raw.get("sky") is String:
 		level["sky"] = raw["sky"]
+	if raw.get("sea") is String:
+		level["sea"] = raw["sea"]
 	if raw.get("killY") is float or raw.get("killY") is int:
 		level["killY"] = float(raw["killY"])
 	var els: Variant = raw.get("elements")

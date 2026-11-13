@@ -10,6 +10,9 @@ const FLY_CAM := 9.0
 const FOV := 58.0
 const ZOOM_FOV := 16.0  # visée précise : longue-vue
 const ZOOM_SENS := 0.22  # et souris ralentie
+## Point visé : à cette distance sur l'axe du tir. Avec ou sans zoom, la caméra regarde exactement ce point : la mire
+## reste sur la même cible quand on zoome ou dézoome.
+const AIM_DIST := 80.0
 const LAND_CAM := 1.4  # atterrissage : durée du passage de la caméra de vol à la caméra au sol (s)
 const TURN_RATE := 9.0  # vitesse à laquelle les personnages pivotent vers leur orientation (vol ↔ debout)
 
@@ -61,6 +64,7 @@ var gear := {}  # id → {flames: [MeshInstance3D], root: [Node3D]}
 var labels: Array = []  # [Label3D, index de planète]
 var zoom := 0.0  # 0 : caméra normale, 1 : visée précise (clic droit / LT)
 var reticle: Control
+var _cross: Control
 var dots: MultiMeshInstance3D
 var dot_mat: StandardMaterial3D
 
@@ -288,9 +292,25 @@ func _build_hud() -> void:
 	reticle = CenterContainer.new()
 	reticle.set_anchors_preset(Control.PRESET_FULL_RECT)
 	reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cross := UI.label("+", 44, Color.WHITE)
-	cross.add_theme_constant_override("outline_size", 8)
-	cross.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	# croix dessinée (deux traits cerclés de noir), centrée au pixel près sur le centre de l'écran
+	var cross := Control.new()
+	cross.custom_minimum_size = Vector2(36, 36)
+	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for bar: Rect2 in [Rect2(0, 16, 36, 4), Rect2(16, 0, 4, 36)]:
+		var shadow := ColorRect.new()
+		shadow.color = Color(0, 0, 0, 0.6)
+		shadow.position = bar.position - Vector2(2, 2)
+		shadow.size = bar.size + Vector2(4, 4)
+		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cross.add_child(shadow)
+	for bar: Rect2 in [Rect2(0, 16, 36, 4), Rect2(16, 0, 4, 36)]:
+		var line := ColorRect.new()
+		line.color = Color("#ffe066")  # jaune, comme les pointillés : ne se confond pas avec les noms des planètes
+		line.position = bar.position
+		line.size = bar.size
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cross.add_child(line)
+	_cross = cross
 	reticle.add_child(cross)
 	reticle.visible = false
 	ctx.ui.hud.add_child(reticle)
@@ -751,25 +771,26 @@ func _camera(dt: float) -> void:
 		up = f_up
 		var c := _cur_p + l.cross(f_up).cross(l).normalized() * 0.8
 		cam_pos = c - l * FLY_CAM + up * 1.2
-		look_at = c + l * 8.0
+		# le centre de l'écran est le point regardé, avec ou sans zoom
+		look_at = _cur_p + l * AIM_DIST
 		if zoom > 0.0:
 			# visée précise : la caméra se place sur l'axe exact de la direction regardée
 			cam_pos = cam_pos.lerp(_cur_p - l * 1.0, zoom)
-			look_at = look_at.lerp(_cur_p + l * 200.0, zoom)
 	else:
 		up = _up()
 		# la caméra suit la visée sans trop lever le nez : on garde l'horizon (et les planètes) en vue
 		var head := _cur_p + up * 1.4
-		var lc := SpaceShared.aim_dir(up, fwd, elev * 0.6)
+		# la caméra se place derrière le personnage (un peu moins haut que la visée, pour qu'il reste à l'image)
+		var lc := SpaceShared.aim_dir(up, fwd, elev * 0.8)
 		# un peu au-dessus de l'épaule droite, pour voir les pointillés partir devant le personnage
 		var right := fwd.cross(up).normalized() * 1.1
 		cam_pos = head - lc * CAM_DIST + up * 1.0 + right
-		look_at = head + lc * 10.0 + right * 0.6
+		# et regarde exactement le point visé : la mire est au même endroit avec ou sans zoom
+		var o := _cur_p + up * 0.3
+		look_at = o + l * AIM_DIST
 		if zoom > 0.0:
 			# visée précise : la caméra se place juste derrière le point de départ, sur l'axe exact du tir
-			var o := _cur_p + up * 0.3
 			cam_pos = cam_pos.lerp(o - l * 1.0, zoom)
-			look_at = look_at.lerp(o + l * 200.0, zoom)
 		# jamais sous la surface
 		var i := SpaceShared.nearest(cam_pos, planets)
 		var c := _center(i)
@@ -801,7 +822,11 @@ func _camera(dt: float) -> void:
 		up = SpaceShared.tangent_frame(up)[0]
 	ctx.camera.look_at_from_position(_cam_pos + jit, look_at, up)
 	ctx.camera.fov = lerpf(FOV, ZOOM_FOV, zoom)
-	reticle.visible = zoom > 0.6
+	# mire : petite et discrète sans zoom, grande en visée précise
+	reticle.visible = status == "aim" or status == "fly"
+	_cross.modulate.a = lerpf(0.85, 1.0, zoom)
+	_cross.pivot_offset = _cross.size / 2.0
+	_cross.scale = Vector2.ONE * lerpf(0.65, 1.0, zoom)
 	# son propre personnage gênerait la vue dans l'axe
 	var me := ctx.me()
 	if me and zoom > 0.6:

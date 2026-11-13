@@ -453,7 +453,7 @@ func _launch(p: Vector3) -> void:
 	fl_pitch = elev
 	ctx.sfx.fire()
 	ctx.sfx.boom(0.6)
-	ctx.shake(0.9)
+	ctx.impact(0.7)
 	ctx.particles.burst(p, 40, [0xffd43b, 0xff922b, 0xffffff], 7.0, 0.25, 0.9, 0.0)
 	ctx.toast("Décollage !", 1.5)
 

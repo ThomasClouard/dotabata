@@ -743,6 +743,16 @@ func _screen_options() -> Control:
 		q_row.add_child(_sounds(b))
 	v.add_child(q_row)
 	v.add_child(_wrap("« Légers » et « moyens » soulagent les petites cartes graphiques.", 13, UI.MUTED))
+	var pfx := CheckBox.new()
+	pfx.text = "Effets physiques (éclats des blocs, os qui s'éparpillent)"
+	pfx.add_theme_font_size_override("font_size", 16)
+	pfx.focus_mode = Control.FOCUS_ALL
+	pfx.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	pfx.button_pressed = Config.physics_fx
+	pfx.toggled.connect(func(on: bool) -> void:
+		Config.physics_fx = on
+		Config.save())
+	v.add_child(_sounds(pfx))
 
 	v.add_child(UI.h2("Écran"))
 	var fs := CheckBox.new()

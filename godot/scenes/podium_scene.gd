@@ -9,6 +9,7 @@ var ranking: Array
 var cols: Array = [Phys.Col.box(0, 0, -0.75, 0, 14, 0.75, 14)]
 var beams: Array = []
 var confetti := 0.0
+var _cam_t := 0.0  # mise en scène de la caméra : grand tour du podium, puis approche du vainqueur (ensuite, orbite libre)
 
 
 func _init(p_ranking: Array) -> void:
@@ -60,6 +61,14 @@ func on_enter(c: Main, _init_data: Variant) -> void:
 
 func on_frame(dt: float) -> void:
 	var t := ctx.now()
+	_cam_t += dt
+	if _cam_t < 7.0:
+		# 0 → 4,5 s : tour large et haut ; puis la caméra descend et s'approche du vainqueur (marche 1)
+		var k := smoothstep(2.5, 6.5, _cam_t)
+		var win := Vector3(STEPS[0][0], STEPS[0][1] + 1.3, 0)
+		ctx.set_spectate(Vector3(0, 1.8, 0).lerp(win, k), lerpf(15.0, 5.5, k))
+		ctx.cam_yaw = PI + (1.0 - k) * (1.2 - _cam_t * 0.35)
+		ctx._cam_pitch = lerpf(0.55, 0.2, k)
 	for i in beams.size():
 		beams[i].rotation = Vector3(cos(t * 0.9 + i) * 0.08, 0, sin(t * 1.1 + i * 2.0) * 0.12)
 	confetti -= dt

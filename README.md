@@ -19,7 +19,7 @@ Trois mini-jeux pour l'instant :
 
   Réglages de la manche en plus du mode, de la durée et des niveaux : **Bousculades entre joueurs** (on peut faire trébucher en fonçant sur quelqu'un ; désactivé = on se traverse) et **Pièces : départager les ex æquo**.
 
-  ![Départ du niveau « fête foraine » : les concurrents s'élancent sous l'arche, entre deux rangées de spectateurs](docs/captures/parcours.jpg)
+  ![Départ du « volcan grincheux » : les concurrents s'élancent sous l'arche, entre les bandes de lave](docs/captures/parcours.jpg)
 - **Abri & mortier** — chacun construit un abri sur son île flottante, puis bombarde les voisins au mortier. Dernier survivant gagne.
 
   <img src="docs/captures/mortier-construction.jpg" width="49%" alt="Construction de l'abri en blocs de bois sur son île"> <img src="docs/captures/mortier-bataille.jpg" width="49%" alt="Bataille : la jauge de tir se charge, les obus volent entre les îles">
@@ -143,7 +143,7 @@ Principes réseau, pensés pour le LAN :
 - **Le serveur fait autorité sur les règles** : phases, chronos, checkpoints, arrivées, obus, destruction des blocs, dégâts, scores. Il simule aussi les bots.
 - **Les obstacles sont déterministes** : leur position est une fonction pure de l'horloge serveur synchronisée, donc rien à synchroniser.
 
-Le rendu est entièrement procédural (aucune texture ni modèle à charger). Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
+Le rendu est entièrement procédural (aucune texture ni modèle à charger ; seule la police Fredoka, sous licence OFL, est livrée dans `godot/ui/fonts/`). Les dégâts sont visibles sans une goutte de sang : chaque personnage a un squelette cartoon sous sa peau, et le shader de la peau efface les fragments autour des points d'impact. À 0 PV il ne reste qu'un tas d'os (et un petit air de xylophone).
 
 ## Ajouter un mini-jeu
 

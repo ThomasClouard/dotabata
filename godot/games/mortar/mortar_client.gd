@@ -63,6 +63,16 @@ func _rebuild() -> void:
 	for k: String in MortarShared.MAT_KEYS:
 		inst[k].multimesh.visible_instance_count = counts[k]
 	dirty = true
+	_sync_ground()
+
+
+## Décor solide des éclats et des os (Jolt) : toutes les îles et tous les blocs.
+func _sync_ground() -> void:
+	if Debris.enabled():
+		var all: Array = MortarShared.colliders(n, {}, -1)
+		for p in n:
+			all.append_array(MortarShared.colliders(n, blocks, p).slice(n))
+		ctx.debris.set_ground(all)
 
 
 func _block_pos(b: Dictionary) -> Vector3:
@@ -70,13 +80,19 @@ func _block_pos(b: Dictionary) -> Vector3:
 	return Vector3(c[0], c[1], c[2])
 
 
-func _remove_blocks(keys: Array) -> void:
+## Retire des blocs ; détruits par une explosion en `from`, ils volent en éclats (effets physiques activés).
+func _remove_blocks(keys: Array, from: Variant = null) -> void:
+	var shatter := from != null and Debris.enabled()
 	for key: String in keys:
 		if not blocks.has(key):
 			continue
 		var b: Dictionary = blocks[key]
 		blocks.erase(key)
-		ctx.particles.burst(_block_pos(b), 8, [MortarShared.MATS[b["mat"]]["color"]], 5.0, 0.22, 0.8)
+		var bp := _block_pos(b)
+		ctx.particles.burst(bp, 4 if shatter else 8, [MortarShared.MATS[b["mat"]]["color"]], 5.0, 0.22, 0.8)
+		if shatter:
+			var basis := Basis(Vector3.UP, MortarShared.plot_yaw(b["plot"], n))
+			ctx.debris.shatter(bp, basis, 0.98, inst[b["mat"]].material_override, from)
 	_rebuild()
 
 
@@ -86,7 +102,7 @@ func _explosion(p: Vector3, r: float, kind: String) -> void:
 	var d := p.distance_to(ctx.body.pos())
 	ctx.sfx.boom(clampf(14.0 / (d + 4.0), 0.15, 1.0) * (1.3 if kind == "mega" else 1.0))
 	if d < 14.0:
-		ctx.shake((1.0 - d / 14.0) * (1.1 if kind == "mega" else 0.7))
+		ctx.impact((1.0 - d / 14.0) * (1.0 if kind == "mega" else 0.65), Color(1.0, 0.8, 0.45))
 	# éclair : sphère qui gonfle puis disparaît, et onde de choc au sol
 	var fm := Gfx.flat(0xffe28a, {"opacity": 0.9})
 	var flash := Gfx.mesh(Shapes.sphere(1.0, 20, 14), fm, p.x, p.y, p.z, ctx.world, false)
@@ -148,6 +164,10 @@ func on_enter(c: Main, p_init: Variant) -> void:
 		g.position = ctr
 		g.rotation.y = MortarShared.plot_yaw(p, n)
 		Gfx.mesh(Shapes.rbox(s + 0.3, 0.5, s + 0.3, 0.24), grass, 0, -0.25, 0, g)
+		# herbe au vent sur le pourtour (pas dans la zone constructible)
+		var herbe := Gfx.grass(Vector2(s, s), 6.0, 0x4fb945, 0xa9ea7e, [Rect2(-4.4, -4.4, 8.8, 8.8)], p + 3)
+		if herbe:
+			g.add_child(herbe)
 		Gfx.mesh(Shapes.rbox(s, MortarShared.THICK - 0.4, s, 0.3), Gfx.mat(0xb08968, {"rough": 0.85}), 0, -0.4 - (MortarShared.THICK - 0.4) / 2.0, 0, g)
 		var rock := Gfx.rock_under(s * 0.98, 6.0, s * 0.98, 0x8a5a3c, p * 7)
 		rock.position.y = -MortarShared.THICK + 0.1
@@ -180,7 +200,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 			if k % 3 == 0:
 				Gfx.mesh(pebble, Gfx.mat(0xaab3bd, {"rough": 0.8}), x, 0.15, z, g).scale = Vector3(0.35, 0.25, 0.3)
 			else:
-				Gfx.mesh(bush, Gfx.mat(0x3fbf6f if k % 2 else 0x55d07f, {"rough": 0.8}), x, 0.25, z, g).scale = Vector3(0.5, 0.38, 0.45)
+				Gfx.mesh(bush, Gfx.foliage(0x3fbf6f if k % 2 else 0x55d07f, 0.05), x, 0.25, z, g).scale = Vector3(0.5, 0.38, 0.45)
 		if p % 2 == 0:
 			var t := Gfx.tree(2.4)
 			t.position = Vector3(-5.3, 0, 5.3)
@@ -214,6 +234,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 	var mc := MortarShared.plot_center(my_plot, n)
 	grid = Gfx.mesh(_grid_mesh(MortarShared.GRID), Gfx.flat(0xffffff, {"opacity": 0.6}), mc.x, 0.06, mc.z, ctx.world, false)
 	grid.rotation.y = MortarShared.plot_yaw(my_plot, n)
+	_sync_ground()
 
 	# chaque personnage porte son mortier
 	for id: String in ctx.players:
@@ -236,7 +257,7 @@ func on_enter(c: Main, p_init: Variant) -> void:
 	for id: String in hp_order:
 		var p: ClientPlayer = ctx.players[id]
 		var l := UI.label("", 14)
-		var bar := UI.bar(170, 10, Gfx.col(p.color))
+		var bar := UI.lag_bar(170, 12, Gfx.col(p.color))
 		side_box.add_child(l)
 		side_box.add_child(bar)
 		side_rows[id] = {"label": l, "bar": bar}
@@ -327,7 +348,7 @@ func on_message(m: Dictionary) -> void:
 				shells.erase(id)
 			if m["t"] == "boom":
 				_explosion(_v3(m["p"]), m["r"], m["kind"])
-				_remove_blocks(m["removed"])
+				_remove_blocks(m["removed"], _v3(m["p"]))
 		"hp":
 			hp[m["id"]] = m["hp"]
 		"dead":
@@ -344,6 +365,7 @@ func on_message(m: Dictionary) -> void:
 					p.hidden = true
 			if id == ctx.my_id:
 				ctx.set_active(false)
+				ctx.impact(1.0, Color(1.0, 0.35, 0.35) if by_hp else Color(0.6, 0.8, 1.0))
 				ctx.set_charging(false)
 				ctx.set_spectate(Vector3(0, 3, 0), maxf(18.0, MortarShared.plot_cz(0, n) * 1.6))
 				ctx.toast("Tu n'es plus qu'un tas d'os !" if by_hp else "Tombé dans le vide !", 3.0)
@@ -423,8 +445,10 @@ func on_frame(dt: float) -> void:
 			var yaw := ctx.cam_yaw
 			var l := MortarShared.launch(ctx.body.px, ctx.body.py, ctx.body.pz, yaw, power)
 			var reach := MortarShared.shell_range(l)
-			marker.position = Vector3(l[0] + sin(yaw) * reach, 0.12, l[2] + cos(yaw) * reach)
-			marker.visible = true
+			# en tombant dans le vide, l'obus ne remonterait jamais à y = 0 : portée indéfinie, pas de marqueur
+			marker.visible = is_finite(reach)
+			if marker.visible:
+				marker.position = Vector3(l[0] + sin(yaw) * reach, 0.12, l[2] + cos(yaw) * reach)
 			marker.rotation.y = t * 3.0
 			if inp.up("Mouse0", "KeyF") or not inp.down("Mouse0", "KeyF"):
 				ctx.send_game({"t": "fire", "yaw": yaw, "power": power})
@@ -460,6 +484,9 @@ func on_frame(dt: float) -> void:
 	for r: MeshInstance3D in rings:
 		r.visible = shrinking
 		r.scale = Vector3(zr, 6.0 + sin(t * 6.0) * 2.0, zr)
+
+	for row: Dictionary in side_rows.values():
+		UI.tick_lag(row["bar"], dt)
 
 	# ----- HUD -----
 	hud_timer -= dt

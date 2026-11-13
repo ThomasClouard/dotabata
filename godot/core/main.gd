@@ -13,6 +13,7 @@ var input := GameInput.new()
 var sfx := Sfx.new()
 var env := GameEnv.new()
 var particles := Particles.new()
+var debris := Debris.new()  # éclats et os simulés par Jolt (purement visuels)
 var ui := GameUI.new()
 var world := Node3D.new()  # contenu du jeu en cours ; vidé à chaque changement de scène
 var char_layer := Node3D.new()
@@ -51,6 +52,8 @@ var _autostarted := false
 var _shadow_mesh: Mesh
 var _shadow_mat: StandardMaterial3D
 var _debug := Debug.new()
+var _fx := ScreenFx.new()  # éclair, aberration chromatique et lignes de vitesse (calque au-dessus de la 3D)
+var _fov_kick := 0.0
 var _menu_cam := [Vector3.ZERO, Vector3.ZERO]  # caméra du menu (position, point visé), lissée
 var _menu_cam_set := false
 
@@ -64,6 +67,7 @@ func _ready() -> void:
 	add_child(world)
 	add_child(char_layer)
 	add_child(particles)
+	add_child(debris)
 	camera.fov = 58.0
 	camera.near = 0.1
 	camera.far = 900.0
@@ -75,6 +79,7 @@ func _ready() -> void:
 	add_child(discovery)
 	add_child(ui)
 	add_child(_debug)
+	add_child(_fx)
 	_debug.main = self
 	body.set_pos(0, 2, 0)
 	_shadow_mesh = Shapes.cylinder(0.5, 0.5, 0.01, 16)
@@ -168,6 +173,15 @@ func send_game(m: Dictionary) -> void:
 
 func shake(amount: float) -> void:
 	_shake = minf(1.2, maxf(_shake, amount))
+
+
+## Impact (explosion proche, élimination) : tremblement, coup d'objectif, éclair coloré et aberration chromatique
+## brève. Purement visuel. `k` de 0 à 1.
+func impact(k: float, flash := Color(1.0, 0.95, 0.8)) -> void:
+	k = clampf(k, 0.0, 1.0)
+	shake(k)
+	_fov_kick = maxf(_fov_kick, 9.0 * k)
+	_fx.hit(k, flash)
 
 
 func set_sky(color: int) -> void:
@@ -418,6 +432,7 @@ func _set_game(g: ClientGame, init: Variant) -> void:
 	for c in world.get_children():
 		world.remove_child(c)
 		c.queue_free()
+	debris.clear()
 	ui.hud_clear()
 	_active = true
 	_spectate = null
@@ -721,13 +736,27 @@ func _process(delta: float) -> void:
 		_cam_target = focus
 	else:
 		_cam_target = _cam_target.lerp(focus, 1.0 - exp(-14.0 * dt))
-	var ch := cos(_cam_pitch) * dist
-	var cam_pos := Vector3(_cam_target.x - sin(cam_yaw) * ch, _cam_target.y + sin(_cam_pitch) * dist + 0.4, _cam_target.z - cos(cam_yaw) * ch)
+	var pitch := _cam_pitch
+	var yaw := cam_yaw
+	# intro de manche : pendant le compte à rebours, la caméra part de haut et de loin et tourne autour du joueur
+	# avant de se poser derrière lui (k va de 1 à 0 entre 3,6 s et 1 s avant le départ)
+	if _phase == "round" and _spectate == null and t < start_at:
+		var k := smoothstep(1.0, 3.6, start_at - t)
+		dist = lerpf(dist, 16.0, k)
+		pitch = lerpf(_cam_pitch, 0.8, k)
+		yaw = cam_yaw + k * k * 1.8
+	var ch := cos(pitch) * dist
+	var cam_pos := Vector3(_cam_target.x - sin(yaw) * ch, _cam_target.y + sin(pitch) * dist + 0.4, _cam_target.z - cos(yaw) * ch)
 	if _shake > 0.01:
-		cam_pos.x += (randf() - 0.5) * _shake
-		cam_pos.y += (randf() - 0.5) * _shake
-		_shake *= exp(-7.0 * dt)
+		# tremblement plus mordant mais plus court : secousses franches qui s'éteignent vite
+		cam_pos.x += (randf() - 0.5) * _shake * 1.3
+		cam_pos.y += (randf() - 0.5) * _shake * 1.3
+		_shake *= exp(-11.0 * dt)
 	camera.look_at_from_position(cam_pos, _cam_target + Vector3(0, 0.4, 0))
+	# coup d'objectif : le champ s'élargit d'un coup puis revient
+	_fov_kick *= exp(-6.0 * dt)
+	camera.fov = 58.0 + _fov_kick
+	_fx.update(dt, Vector2(body.vx, body.vz).length() if _active and _phase == "round" else 0.0, absf(body.vy) if _active and _phase == "round" else 0.0)
 
 	if _game:
 		_game.on_frame(dt)
@@ -744,6 +773,8 @@ func _process(delta: float) -> void:
 			elif n <= 0:
 				ui.set_count("GO !")
 				sfx.go()
+				if _active:
+					particles.burst(body.pos() + Vector3(0, 2.2, 0), 40, [0xff4d6d, 0xffd60a, 0x70e000, 0x00b4d8, 0x9d4edd, 0xffffff], 6.0, 0.13, 1.2, 9.0, 1.2)
 			else:
 				ui.set_count("")
 		if left < -0.8:

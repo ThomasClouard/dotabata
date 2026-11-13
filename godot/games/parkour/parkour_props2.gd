@@ -487,7 +487,7 @@ func on_pre(ev: Dictionary, b: Phys.Body, from: Vector3) -> void:
 	if ev["launched"] >= 0:
 		ctx.sfx.boom(0.6)
 		ctx.sfx.fire()
-		ctx.shake(0.5)
+		ctx.impact(0.4)
 		for rec: Dictionary in recs:
 			if rec["i"] == ev["launched"] and rec.has("mouth"):
 				ctx.particles.burst(rec["mouth"], 18, [0xffffff, 0xd6d6d6, 0xffd60a], 4.0, 0.25, 0.8, -1.0)

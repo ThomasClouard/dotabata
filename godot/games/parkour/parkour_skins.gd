@@ -127,6 +127,8 @@ func body(e: Dictionary, i: int) -> Node3D:
 			rec["heads"] = _bouquet(g, sy / 2.0, sy / 2.0 + maxf(1.2, sy * 0.8), minf(sx, sz) * 0.3, i)
 		"leaf":
 			_leaf(g, sx, sy, sz)
+		"tonearm":
+			_tonearm(g, sx, sy, sz)
 		"wire":
 			_wire(g, sx, sy, sz)
 		"cloud":
@@ -291,6 +293,20 @@ func _leaf(g: Node3D, sx: float, sy: float, sz: float) -> void:
 			v.rotation.y = s * 0.9
 	var stalk := Gfx.mesh(Shapes.cylinder(0.12, 0.12, 1.0, 8), lm, 0, 0, 0, g)
 	Gfx.stretch(stalk, Vector3(-sx / 2.0 + 0.2, 0, 0), Vector3(-sx / 2.0 - 1.0, -0.35, 0), 0.14)
+
+
+## Bras de lecture du tourne-disque, le long de x local : pied et contrepoids au bout +x, tête de lecture au bout -x.
+func _tonearm(g: Node3D, sx: float, sy: float, _sz: float) -> void:
+	var metal := Gfx.mat(0xd9dde3, {"metal": 0.8, "rough": 0.2})
+	var r := sy / 2.0
+	var tube := Gfx.mesh(Shapes.cylinder(r * 0.8, r * 0.8, sx * 0.9, 16), metal, sx * 0.03, 0, 0, g)
+	tube.rotation.z = PI / 2.0
+	# pied (jusqu'au socle) et contrepoids
+	Gfx.mesh(Shapes.cylinder(r * 1.5, r * 1.8, 1.0, 16), metal, sx / 2.0 - r * 1.2, -0.4, 0, g)
+	var w := Gfx.mesh(Shapes.cylinder(r * 1.3, r * 1.3, r * 2.2, 16), Gfx.mat(0x2b2140, {"rough": 0.3}), sx / 2.0 + r * 0.6, 0, 0, g)
+	w.rotation.z = PI / 2.0
+	# tête de lecture
+	Gfx.mesh(Shapes.rbox(r * 3.0, r * 1.6, r * 2.6, 0.05), Gfx.mat(0x2b2140, {"rough": 0.3}), -sx / 2.0 + r * 1.5, -r * 0.2, 0, g)
 
 
 ## Fil d'étendoir le long de x local : corde fine, pinces à linge.
@@ -470,13 +486,7 @@ func _record(e: Dictionary, rec: Dictionary) -> Node3D:
 	Gfx.mesh(Shapes.cylinder(r * 0.3, r * 0.3, 0.04, 32), Gfx.mat(0xe63946, {"rough": 0.4}), 0, sy / 2.0 + 0.01, 0, spin, false)
 	Gfx.mesh(Shapes.rbox(r * 0.22, 0.05, r * 0.06, 0.02), Gfx.mat(0xffd60a), r * 0.12, sy / 2.0 + 0.04, 0, spin, false)
 	Gfx.mesh(Shapes.cylinder(0.08, 0.08, 0.3, 8), Gfx.mat(0xd9dde3, {"metal": 0.8}), 0, sy / 2.0 + 0.15, 0, spin)
-	# bras de lecture posé hors du disque
-	var arm := Gfx.mat(0xd9dde3, {"metal": 0.8, "rough": 0.2})
-	var base := Vector3(r * 1.12, sy / 2.0, -r * 0.95)
-	Gfx.mesh(Shapes.cylinder(0.28, 0.32, 0.5, 14), arm, base.x, base.y + 0.1, base.z, root)
-	var a := Gfx.mesh(Shapes.cylinder(0.07, 0.07, 1.0, 8), arm, 0, 0, 0, root)
-	Gfx.stretch(a, base + Vector3(0, 0.35, 0), Vector3(r * 1.12, sy / 2.0 + 0.3, r * 0.5), 1.0)
-	Gfx.mesh(Shapes.rbox(0.3, 0.18, 0.45, 0.05), Gfx.mat(0x2b2140), r * 1.12, sy / 2.0 + 0.25, r * 0.55, root)
+	# (le bras de lecture est un élément à part, une plateforme d'apparence "tonearm" posée sur le disque)
 	rec["spin"] = spin
 	return root
 
@@ -708,26 +718,49 @@ func _rack(g: Node3D, e: Dictionary, sx: float, sy: float, sz: float, rec: Dicti
 		top.rotation.x = PI / 2.0
 		var mid := Gfx.mesh(Shapes.cylinder(0.07, 0.07, sz * 0.7, 8), metal, s * sx / 2.0, sy * 0.45, 0, g)
 		mid.rotation.x = PI / 2.0
-	# linge qui pend au bord de l'étendoir (sous les fils, sans gêner le passage)
+	# linge pendu sous les fils de l'étendoir (les dalles "wire" posées dans sa boîte), dans l'alignement du fil
 	var clothes := []
-	var cols := [0xff4d6d, 0x4cc9f0, 0xffd60a, 0xc77dff]
-	for k in 4:
-		var c := Node3D.new()
-		var x := (-0.5 + (k + 0.5) / 4.0) * sx * 0.8
-		c.position = Vector3(x, sy - 0.15, (sz * 0.45) * (1.0 if k % 2 == 0 else -1.0))
-		g.add_child(c)
-		var m := Gfx.mat(cols[k], {"rough": 0.6, "double": true})
-		if k % 2 == 0:
-			# t-shirt
-			Gfx.mesh(Shapes.rbox(1.2, 1.3, 0.06, 0.05), m, 0, -0.7, 0, c)
+	var cols := [0xff4d6d, 0x4cc9f0, 0xffd60a, 0xc77dff, 0x70e000, 0xff9e00]
+	var yaw: float = e.get("yaw", 0.0)
+	var base_y: float = e["pos"][1] - sy / 2.0
+	var lines := []  # [z local, hauteur du fil au-dessus de la base]
+	for w: Dictionary in wires:
+		if not Level.in_zone(e, w["pos"][0], e["pos"][1], w["pos"][2]):
+			continue
+		var dx: float = w["pos"][0] - e["pos"][0]
+		var dz: float = w["pos"][2] - e["pos"][2]
+		lines.append([dx * sin(yaw) + dz * cos(yaw), w["pos"][1] - base_y])
+	if lines.is_empty():
+		lines = [[sz * 0.4, sy], [-sz * 0.4, sy]]
+	var k := 0
+	for li in lines.size():
+		var lz: float = lines[li][0]
+		var ly: float = lines[li][1]
+		for j in 3:
+			var c := Node3D.new()
+			var x := (-0.5 + (j + 0.5) / 3.0) * sx * 0.85 + (li - 1) * 0.9
+			c.position = Vector3(x, ly - 0.08, lz)
+			g.add_child(c)
+			var m := Gfx.mat(cols[k % cols.size()], {"rough": 0.6, "double": true})
+			# pinces à linge
 			for s in [-1.0, 1.0]:
-				var sl := Gfx.mesh(Shapes.rbox(0.45, 0.4, 0.06, 0.05), m, s * 0.75, -0.25, 0, c)
-				sl.rotation.z = s * 0.5
-		else:
-			# chaussette
-			Gfx.mesh(Shapes.rbox(0.35, 0.9, 0.08, 0.06), m, 0, -0.5, 0, c)
-			Gfx.mesh(Shapes.rbox(0.55, 0.32, 0.08, 0.06), m, 0.12, -0.95, 0, c)
-		clothes.append([c, _hash(k, 3) * TAU])
+				Gfx.mesh(Shapes.rbox(0.12, 0.3, 0.1, 0.03), Gfx.mat(0xffffff, {"rough": 0.4}), s * 0.7, 0.0, 0, c)
+			match (k + li) % 3:
+				0:
+					# t-shirt
+					Gfx.mesh(Shapes.rbox(2.0, 2.2, 0.08, 0.08), m, 0, -1.15, 0, c)
+					for s in [-1.0, 1.0]:
+						var sl := Gfx.mesh(Shapes.rbox(0.8, 0.7, 0.08, 0.06), m, s * 1.25, -0.45, 0, c)
+						sl.rotation.z = s * 0.55
+				1:
+					# chaussette
+					Gfx.mesh(Shapes.rbox(0.6, 1.6, 0.1, 0.08), m, 0, -0.85, 0, c)
+					Gfx.mesh(Shapes.rbox(1.0, 0.55, 0.1, 0.08), m, 0.22, -1.6, 0, c)
+				_:
+					# serviette rayée
+					Gfx.mesh(Shapes.rbox(1.8, 2.6, 0.06, 0.05), Gfx.mat(0xffffff, {"map": Tex.stripes("#" + Gfx.col(cols[k % cols.size()]).to_html(false), "#ffffff"), "uv": Vector2(1, 2), "double": true}), 0, -1.35, 0, c)
+			clothes.append([c, _hash(k, 3) * TAU])
+			k += 1
 	rec["clothes"] = clothes
 
 

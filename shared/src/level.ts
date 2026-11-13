@@ -13,7 +13,7 @@ const phase = z.number().min(0).max(1).default(0);
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/).optional();
 const link = z.string().min(1).max(20);
 /** Apparences (rendu seulement, la collision reste la boîte) : voir elementCatalog. */
-export const SKINS = ['table', 'notebook', 'pencilcase', 'pencil', 'record', 'tv', 'pot', 'flowerpot', 'leaf', 'sunflower', 'mallet', 'wire', 'cloud', 'plane', 'kite', 'bird', 'wing', 'heli', 'rock', 'scree'] as const;
+export const SKINS = ['table', 'notebook', 'pencilcase', 'pencil', 'record', 'tv', 'pot', 'flowerpot', 'leaf', 'tonearm', 'sunflower', 'mallet', 'wire', 'cloud', 'plane', 'kite', 'bird', 'wing', 'heli', 'rock', 'scree'] as const;
 const skin = z.enum(SKINS).optional();
 
 export const ElementSchema = z.discriminatedUnion('type', [
@@ -838,7 +838,7 @@ export function elementCatalog() {
 }
 
 /** Apparences proposées pour les dalles (catalogue). */
-const SKIN_DOC = 'apparence optionnelle (collision inchangée) : maison "table", "notebook", "pencilcase", "pencil" (crayon couché le long de z local), "tv", "pot", "flowerpot" (pot de fleurs), "leaf", "wire" (fil d\'étendoir : corde fine et pose d\'équilibriste, size.z ≈ 0.5) ; ciel "cloud", "plane", "kite", "bird", "heli" ; volcan "rock", "scree"';
+const SKIN_DOC = 'apparence optionnelle (collision inchangée) : maison "table", "notebook", "pencilcase", "pencil" (crayon couché le long de z local), "tv", "pot", "flowerpot" (pot de fleurs), "leaf", "tonearm" (bras de tourne-disque le long de x local, pied à +x : à poser sur le disque pour gêner), "wire" (fil d\'étendoir : corde fine et pose d\'équilibriste, size.z ≈ 0.5) ; ciel "cloud", "plane", "kite", "bird", "heli" ; volcan "rock", "scree"';
 
 /** Marge de sécurité appliquée aux sauts par la validation. */
 export const SAFETY = 0.85;

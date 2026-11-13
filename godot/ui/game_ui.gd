@@ -10,6 +10,7 @@ signal bot_removed(id: String)
 signal start_pressed
 signal stop_pressed
 signal to_lobby_pressed
+signal next_pressed  ## « Jeu suivant » sur l'écran des scores
 ## Accueil : rejoindre un serveur (mot de passe "" si aucun), en créer un ; quitter / fermer le serveur.
 signal leave_pressed
 ## Hôte : réglages du serveur modifiés ({name, max, password}).
@@ -256,8 +257,16 @@ func toast(text: String, seconds := 1.8) -> void:
 
 # ---------- voile central ----------
 
-func _fill_overlay(children: Array, width := 440.0) -> VBoxContainer:
+## animate = false : la fenêtre est déjà affichée et on ne fait qu'en remplacer le contenu (pas d'animation d'ouverture).
+var _settings_shown := false
+var _next_btn: Button  # bouton « Jeu suivant » de l'écran des scores
+var _ready_l: Label  # qui on attend encore
+var _score_names := {}  # id → nom, pour l'écran des scores  # la fenêtre centrale affiche les réglages de la partie
+
+
+func _fill_overlay(children: Array, width := 440.0, animate := true) -> VBoxContainer:
 	_tab = ""  # la carte centrale ne montre plus les réglages de la partie
+	_settings_shown = false
 	_overlay_card.custom_minimum_size.x = width
 	for c in _overlay_card.get_children():
 		_overlay_card.remove_child(c)
@@ -268,12 +277,14 @@ func _fill_overlay(children: Array, width := 440.0) -> VBoxContainer:
 		v.add_child(c)
 	_overlay_card.add_child(v)
 	overlay.visible = true
-	UI.pop_in(_overlay_card, 0.0, 0.85, 0.3)
+	if animate:
+		UI.pop_in(_overlay_card, 0.0, 0.85, 0.3)
 	return v
 
 
 func hide_overlay() -> void:
 	_tab = ""
+	_settings_shown = false
 	overlay.visible = false
 
 
@@ -417,9 +428,40 @@ func show_scores(m: Dictionary, players: Array, my_id: String, game_name: String
 		tot.custom_minimum_size.x = 40
 		tot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		kids.append(_table_row([_rank_label(i), UI.dot(Gfx.col(int(p["color"]))), name_l, res_l, pts, tot], id == my_id))
-	kids.append(UI.small("Direction le podium…" if m["last"] else "Prochaine manche dans quelques secondes…"))
+	_score_names = {}
+	for id: String in by_id:
+		_score_names[id] = by_id[id]["name"]
+	_next_btn = UI.button("Voir le podium" if m["last"] else "Jeu suivant", "big", func() -> void: next_pressed.emit())
+	_next_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	kids.append(_next_btn)
+	_ready_l = UI.small("Espace, Entrée ou %s : continuer" % Pad.label(Pad.bindings["sauter"]) if Pad.device() >= 0 else "Espace ou Entrée : continuer")
+	_ready_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	kids.append(_ready_l)
 	# les lignes arrivent l'une après l'autre
 	UI.stagger(_fill_overlay(kids), 0.07, 0.15)
+
+
+## Le joueur a cliqué « Jeu suivant » : le bouton se fige en attendant les autres.
+func mark_ready() -> void:
+	if is_instance_valid(_next_btn):
+		_next_btn.disabled = true
+		_next_btn.text = "Prêt !"
+
+
+## Qui est prêt (message « ready » du serveur) : on affiche qui on attend encore.
+func show_ready(ids: Array, need: Array, my_id: String) -> void:
+	if not is_instance_valid(_ready_l) or ids.is_empty():
+		return
+	var prog := "Prêts : %d/%d" % [ids.size(), need.size()]
+	if not ids.has(my_id):
+		_ready_l.text = prog + " · on n'attend plus que toi !" if ids.size() == need.size() - 1 else prog
+		return
+	mark_ready()
+	var names: Array = []
+	for id: String in need:
+		if not ids.has(id):
+			names.append(_score_names.get(id, "?"))
+	_ready_l.text = prog + ("" if names.is_empty() else " · on attend %s" % ", ".join(names.slice(0, 4)) + ("…" if names.size() > 4 else ""))
 
 
 ## Classement final ; renvoie les identifiants dans l'ordre du podium.
@@ -769,6 +811,8 @@ func _switch_tab(dir: int) -> void:
 
 
 func _build_settings() -> void:
+	# déjà ouverte (changement d'un réglage, d'onglet, mise à jour du lobby) : on remplace le contenu sans la refaire apparaître
+	var refresh := overlay.visible and _settings_shown
 	var m := _lobby_m
 	var host: bool = m["hostId"] == _lobby_me
 	var s: Dictionary = m["settings"].duplicate(true)
@@ -837,8 +881,9 @@ func _build_settings() -> void:
 	foot.add_child(UI.button("Terminé", "big", func() -> void: close_game_settings.call_deferred()))
 	kids.append(foot)
 
-	_fill_overlay(kids, 620)
+	_fill_overlay(kids, 620, not refresh)
 	_tab = tab
+	_settings_shown = true
 	if pad_nav:
 		_pad_focusables(_overlay_card, true)
 		_restore_focus(_overlay_card, keep_focus)

@@ -1,0 +1,490 @@
+{
+  "name": "sur-le-volcan",
+  "title": "Sur le volcan",
+  "author": "Une jeune conceptrice",
+  "difficulty": 3,
+  "sky": "#5e2a33",
+  "sea": "#ff5400",
+  "elements": [
+    {
+      "id": "lave",
+      "type": "hazard",
+      "style": "lava",
+      "pos": [
+        0,
+        -5,
+        50
+      ],
+      "size": [
+        44,
+        1,
+        130
+      ]
+    },
+    {
+      "id": "depart",
+      "type": "start",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        0
+      ],
+      "size": [
+        10,
+        1,
+        10
+      ]
+    },
+    {
+      "type": "deco",
+      "kind": "crystal",
+      "pos": [
+        4,
+        0.8,
+        -3
+      ],
+      "size": [
+        1,
+        1.6,
+        1
+      ],
+      "color": "#ff7a1a"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        -4,
+        0.5,
+        -3.5
+      ],
+      "size": [
+        2,
+        1.4,
+        2
+      ],
+      "color": "#5a4a44"
+    },
+    {
+      "id": "jet-1",
+      "type": "geyser",
+      "pos": [
+        0,
+        -0.25,
+        6.7
+      ],
+      "size": [
+        2,
+        8.5,
+        2
+      ],
+      "period": 4,
+      "on": 0.4
+    },
+    {
+      "type": "sign",
+      "pos": [
+        -3.6,
+        1.4,
+        4.2
+      ],
+      "size": [
+        2.6,
+        1.1,
+        0.2
+      ],
+      "yaw": 3.141592653589793,
+      "text": "Saute quand le jet s'arrête"
+    },
+    {
+      "id": "dalle",
+      "type": "platform",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        22.7
+      ],
+      "size": [
+        7,
+        1,
+        28.6
+      ]
+    },
+    {
+      "id": "cailloux-1",
+      "type": "rockfall",
+      "pos": [
+        0,
+        6,
+        17
+      ],
+      "size": [
+        3.6,
+        12,
+        10
+      ],
+      "count": 3,
+      "stone": 1.3,
+      "interval": 2.2,
+      "warn": 1.2
+    },
+    {
+      "type": "sign",
+      "pos": [
+        3,
+        1.4,
+        10.5
+      ],
+      "size": [
+        2.4,
+        1.1,
+        0.2
+      ],
+      "yaw": 3.141592653589793,
+      "text": "Attention, ça tombe !"
+    },
+    {
+      "id": "marteau-gauche",
+      "type": "hammer",
+      "strike": 1,
+      "axis": "x",
+      "pos": [
+        -4.1,
+        0.8,
+        28
+      ],
+      "size": [
+        2.2,
+        1.6,
+        1.8
+      ],
+      "length": 4.1,
+      "period": 2.6
+    },
+    {
+      "id": "marteau-droit",
+      "type": "hammer",
+      "strike": -1,
+      "axis": "x",
+      "pos": [
+        4.1,
+        0.8,
+        31.5
+      ],
+      "size": [
+        2.2,
+        1.6,
+        1.8
+      ],
+      "length": 4.1,
+      "period": 2.6,
+      "phase": 0.5
+    },
+    {
+      "type": "coin",
+      "pos": [
+        0,
+        1,
+        25
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "eboulis",
+      "type": "blink",
+      "skin": "scree",
+      "pos": [
+        0,
+        -0.5,
+        40
+      ],
+      "size": [
+        5,
+        1,
+        6
+      ],
+      "period": 4.5,
+      "on": 0.6
+    },
+    {
+      "type": "platform",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        47
+      ],
+      "size": [
+        7,
+        1,
+        8
+      ]
+    },
+    {
+      "type": "checkpoint",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        56
+      ],
+      "size": [
+        6,
+        1,
+        6
+      ]
+    },
+    {
+      "id": "englouti",
+      "type": "moving",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        64.5
+      ],
+      "size": [
+        4,
+        1,
+        4
+      ],
+      "delta": [
+        0,
+        -4.6,
+        0
+      ],
+      "period": 6
+    },
+    {
+      "type": "platform",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        72.5
+      ],
+      "size": [
+        5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "cailloux-2",
+      "type": "rockfall",
+      "pos": [
+        0,
+        5.5,
+        72.5
+      ],
+      "size": [
+        3.6,
+        11,
+        4
+      ],
+      "count": 2,
+      "stone": 1.2,
+      "interval": 2,
+      "warn": 1.1
+    },
+    {
+      "type": "checkpoint",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        81
+      ],
+      "size": [
+        6,
+        1,
+        6
+      ]
+    },
+    {
+      "id": "jet-2",
+      "type": "geyser",
+      "pos": [
+        0,
+        -0.25,
+        86
+      ],
+      "size": [
+        1.6,
+        8.5,
+        1.6
+      ],
+      "period": 3.5,
+      "on": 0.4
+    },
+    {
+      "type": "platform",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        89.5
+      ],
+      "size": [
+        4,
+        1,
+        4
+      ]
+    },
+    {
+      "type": "coin",
+      "pos": [
+        0,
+        1,
+        89.5
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "jet-3",
+      "type": "geyser",
+      "pos": [
+        0,
+        -0.25,
+        93
+      ],
+      "size": [
+        1.6,
+        8.5,
+        1.6
+      ],
+      "period": 3.5,
+      "on": 0.4,
+      "phase": 0.5
+    },
+    {
+      "type": "finish",
+      "skin": "rock",
+      "pos": [
+        0,
+        -0.5,
+        98
+      ],
+      "size": [
+        8,
+        1,
+        6
+      ]
+    },
+    {
+      "type": "deco",
+      "kind": "flag",
+      "pos": [
+        -3.4,
+        1.5,
+        100
+      ],
+      "size": [
+        1,
+        3,
+        1
+      ],
+      "color": "#ff3b1f"
+    },
+    {
+      "type": "deco",
+      "kind": "crystal",
+      "pos": [
+        3.4,
+        0.8,
+        100
+      ],
+      "size": [
+        1,
+        1.6,
+        1
+      ],
+      "color": "#ffb02e"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        -8,
+        -3.5,
+        20
+      ],
+      "size": [
+        3,
+        2.4000000000000004,
+        3
+      ],
+      "color": "#3d302b"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        9,
+        -3.5,
+        35
+      ],
+      "size": [
+        2.5,
+        2,
+        2.5
+      ],
+      "color": "#3d302b"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        -9,
+        -3.5,
+        60
+      ],
+      "size": [
+        3.5,
+        2.8000000000000003,
+        3.5
+      ],
+      "color": "#3d302b"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        8,
+        -3.5,
+        75
+      ],
+      "size": [
+        2.5,
+        2,
+        2.5
+      ],
+      "color": "#3d302b"
+    },
+    {
+      "type": "deco",
+      "kind": "rock",
+      "pos": [
+        -7,
+        -3.5,
+        92
+      ],
+      "size": [
+        2,
+        1.6,
+        2
+      ],
+      "color": "#3d302b"
+    }
+  ]
+}

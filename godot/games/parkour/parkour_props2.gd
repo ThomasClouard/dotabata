@@ -325,6 +325,20 @@ func build(e: Dictionary, i: int) -> Node3D:
 				rec["sock"] = sock
 				rec["sock_dir"] = atan2(fh.x, fh.z)
 				pole.name = "mât"
+			if f[1] > 0.1 and fh.length() < f[1]:
+				# courant d'air vers le haut : colonne translucide et anneaux qui montent, plus vite quand ça souffle fort
+				var col_m := Gfx.flat(0xa8dcff, {"opacity": 0.12, "double": true})
+				var column := Gfx.mesh(Shapes.rbox(sx, sy, sz, minf(1.0, minf(sx, sz) * 0.2)), col_m, 0, 0, 0, root, false)
+				var rings := []
+				var ring_m := Gfx.flat(0x7cc8ff, {"opacity": 0.55, "double": true})
+				for k in 4:
+					var ring := Gfx.mesh(Shapes.torus(1.0, 0.035, 40, 6), ring_m, 0, 0, 0, root, false)
+					ring.scale = Vector3(sx / 2.0, 1.0, sz / 2.0)
+					rings.append(ring)
+				rec["up_mat"] = col_m
+				rec["ring_mat"] = ring_m
+				rec["rings"] = rings
+				rec["rise"] = 0.0
 	if root != null and rec.size() > 3:
 		recs.append(rec)
 	return root
@@ -391,6 +405,17 @@ func update(t: float, dt: float) -> void:
 					var y := (fposmod(s.y + t * 0.04, 1.0) - 0.5) * sy
 					mm.set_instance_transform(k, Transform3D(Basis.IDENTITY, Vector3(s.x + sin(t * 0.5 + k) * 0.3, y, s.z)))
 			"wind":
+				if rec.has("rings"):
+					var gust := Level.wind_gust(e, t)
+					rec["rise"] += dt * (0.15 + gust * 1.2)
+					var sy: float = e["size"][1]
+					var rings: Array = rec["rings"]
+					for k in rings.size():
+						var u := fposmod(rec["rise"] + k / float(rings.size()), 1.0)
+						var ring: MeshInstance3D = rings[k]
+						ring.position.y = -sy / 2.0 + u * sy
+					rec["up_mat"].albedo_color.a = 0.04 + 0.16 * gust
+					rec["ring_mat"].albedo_color.a = 0.1 + 0.6 * gust
 				if rec.has("sock"):
 					var gust := Level.wind_gust(e, t)
 					var sock: Node3D = rec["sock"]

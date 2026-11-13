@@ -40,12 +40,14 @@ function hitFactor(c: Contact): number {
   const speed = Math.hypot(c.cv[0], c.cv[2]);
   const side = !c.ground;
   switch (c.tag) {
-    case 'hammer': return speed > 1.5 ? 1.25 : 0;
+    case 'hammer': return speed > 1.5 || c.cv[1] < -3 ? 1.25 : 0; // balayage, ou coup de marteau qui s'abat
     case 'spinner': case 'sweeper': return side && speed > 1 ? 1.4 : 0;
     case 'cannon': case 'puncher': return side && speed > 2 ? 1.1 : 0;
     case 'wreckingball': return speed > 1.5 ? 1.3 : 0;
     case 'boulder': return side && speed > 1.5 ? 1.2 : 0;
     case 'gate': return side && c.cv[1] < -2 ? 1 : 0; // lame qui tombe
+    case 'popper': return c.cv[1] > 1.5 ? 1 : 0; // castor qui jaillit
+    case 'rockfall': return c.cv[1] < -3 ? 1 : 0; // pierre qui tombe
     default: return 0;
   }
 }
@@ -122,7 +124,7 @@ export function parkourPreStep(level: Level, b: Body, dt: number, t = 0): PreEve
 export function parkourPostStep(b: Body, contacts: Contact[]): ContactEvents {
   const ev: ContactEvents = { knocked: false, crumble: [], bounced: false, killed: false, hazard: -1, boosted: false };
   for (const c of contacts) {
-    if (c.tag === 'hazard') { ev.killed = true; ev.hazard = c.id; }
+    if (c.tag === 'hazard' || c.tag === 'geyser') { ev.killed = true; ev.hazard = c.id; }
     if (c.bounced) ev.bounced = true;
     if (c.tag === 'boost' && c.ground) ev.boosted = true;
     if (c.tag === 'crumble' && c.ground) ev.crumble.push(c.id);
@@ -130,13 +132,15 @@ export function parkourPostStep(b: Body, contacts: Contact[]): ContactEvents {
     if (b.shield > 0) continue; // bouclier : aucune frappe
     const k = hitFactor(c);
     if (k <= 0) continue;
-    if (c.tag === 'gate') {
-      // la lame tombe : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
+    if (c.tag === 'gate' || c.tag === 'popper' || c.tag === 'rockfall' || (c.tag === 'hammer' && Math.hypot(c.cv[0], c.cv[2]) <= 1.5)) {
+      // poussée verticale : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
       let dx = c.n[0], dz = c.n[2], d = Math.hypot(dx, dz);
       if (d < 0.3) { dx = -b.v[0]; dz = -b.v[2]; d = Math.hypot(dx, dz); }
       if (d < 0.1) { dx = 0; dz = 1; d = 1; }
-      b.v[0] = (dx / d) * 7; b.v[2] = (dz / d) * 7;
-      b.v[1] = Math.min(b.v[1], 0);
+      const sp = c.tag === 'gate' ? 7 : c.tag === 'popper' ? 4.5 : 6; // marteau qui s'abat : comme une pierre
+      b.v[0] = (dx / d) * sp; b.v[2] = (dz / d) * sp;
+      // lame : plaqué au sol ; castor : projeté en l'air ; pierre : petit bond
+      b.v[1] = c.tag === 'gate' ? Math.min(b.v[1], 0) : c.tag === 'popper' ? Math.max(b.v[1], 8) : Math.max(b.v[1], 3);
     } else {
       b.v[0] = c.cv[0] * k; b.v[2] = c.cv[2] * k;
       b.v[1] = Math.max(b.v[1], 5.5);

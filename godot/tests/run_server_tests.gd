@@ -22,7 +22,7 @@ func _init() -> void:
 		# les bots repartent du départ après chaque arrivée : plusieurs arrivées par bot
 		var log := _test_bots("balade (meilleur temps)", LevelStore.read_level("balade"), 4, 200.0, 6, {"mode": "best"})
 		_ok(log.any(func(m: Dictionary) -> bool: return m["t"] == "finish" and m["runs"] >= 2), "meilleur temps : un bot arrivé au moins deux fois")
-	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau"]:
+	for lv: String in ["balade", "usine", "vertige", "fete-foraine", "volcan", "labo", "chateau", "maison", "ciel", "sur-le-volcan"]:
 		if _wants(lv):
 			var need := 1 if lv in ["balade", "usine", "vertige"] else 3
 			_test_bots(lv, LevelStore.read_level(lv), 6, 260.0, need)
@@ -225,6 +225,37 @@ func _test_mortar() -> void:
 	_eq(ids.size(), 5, "mortier : joueurs distincts")
 	_ok(results.any(func(r: Dictionary) -> bool: return r["rank"] == 0), "mortier : un vainqueur")
 	print("mortier : %d obus, %d explosions, fin à %.1f s" % [h.of("shell").size(), h.of("boom").size(), h.t])
+	_test_mortar_holes()
+
+
+## Option « les obus trouent les îles » : des trous creusés, le sol des collisions découpé autour, partie jouable.
+func _test_mortar_holes() -> void:
+	var rects := MortarShared.island_rects({Vector2i(5, 5): true, Vector2i(6, 5): true})
+	var area := 0
+	for r: Array in rects:
+		area += (r[2] - r[0]) * (r[3] - r[1])
+	_eq(area, MortarShared.HOLE_N * MortarShared.HOLE_N - 2, "trous : le sol plein couvre tout sauf les 2 cases")
+	_eq(MortarShared.island_rects({}).size(), 1, "trous : île intacte en un seul bloc")
+	var s := Scoring.default_game_settings(GameMetas.MORTAR)
+	s.merge({"buildTime": 5, "battleTime": 90, "shrink": 30, "holes": true}, true)
+	var h := Harness.new(s, 5, true)
+	var g := MortarServer.new(h.ctx)
+	h.game = g
+	var res := g.on_start()
+	_ok(res["init"]["holes"] == true, "trous : option transmise aux clients")
+	for id: String in res["spawns"]:
+		var sp: Array = res["spawns"][id]
+		h.player(id).p = [sp[0], sp[1], sp[2]]
+	h.simulate(120.0)
+	_ok(h.ended, "trous : la bataille se termine")
+	var dug := 0
+	for m: Dictionary in h.of("boom"):
+		dug += m["holes"].size()
+	_ok(dug > 20, "trous : des cases arrachées (%d)" % dug)
+	_ok(MortarShared.colliders(g.n, {}, -1, g.holes).size() > g.n, "trous : sol des collisions découpé")
+	var c0 := MortarShared.plot_center(0, g.n)
+	_ok(not MortarShared.is_hole({}, 0, g.n, c0.x, c0.z), "trous : aucun trou sans option")
+	print("mortier troué : %d cases arrachées" % dug)
 
 
 func _space(n: int, bots: bool, extra := {}) -> Harness:
@@ -359,6 +390,40 @@ func _test_session_rules() -> void:
 	var cfg := Session._clean_server_cfg({"name": "  <Salle>\n ", "max": 99, "password": 3}, {"name": "x", "max": 6, "password": "pw"})
 	_eq(cfg, {"name": "Salle", "max": Protocol.MAX_PLAYERS, "password": "pw"}, "réglages du serveur nettoyés")
 	print("règles de session : OK")
+	_test_next_round()
+
+
+## Écran des scores : la manche suivante démarre quand tous les joueurs ont cliqué « Jeu suivant ».
+func _test_next_round() -> void:
+	var s := Session.new()
+	var a := s._add_player("A", null, null, false)
+	var b := s._add_player("B", null, null, false)
+	var c := s._add_player("C", null, null, false)
+	s._add_player("Bot", null, null, true)
+	s.rounds = ["parkour", "parkour", "parkour"]
+	s.round_index = 0
+	s._start_round()
+	_eq(s.phase, "round", "manche 1 lancée")
+	s._end_round()
+	_eq(s.phase, "scores", "écran des scores")
+	s.on_message(a, {"t": "next"})
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	_eq(s.phase, "scores", "on attend encore C (le bot ne compte pas)")
+	s.on_message(c, {"t": "next"})
+	_ok(s.phase == "round" and s.round_index == 1, "tout le monde prêt : manche 2")
+	s.on_message(a, {"t": "next"})  # hors écran des scores : ignoré
+	s._end_round()
+	_ok(s.ready.is_empty(), "prêts remis à zéro à chaque écran des scores")
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	s._remove_player(c.id)
+	_ok(s.phase == "round" and s.round_index == 2, "le joueur attendu part : on enchaîne")
+	s._end_round()
+	s.on_message(a, {"t": "next"})
+	s.on_message(b, {"t": "next"})
+	_eq(s.phase, "podium", "dernière manche : podium")
+	print("jeu suivant : OK")
 
 
 # ---------- parcours : modes, recommencer, arrivée ----------

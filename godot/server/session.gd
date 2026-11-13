@@ -8,7 +8,9 @@ const BOT_NAMES := ["Nouille", "Patate", "Cornichon", "Biscotte", "Gnocchi", "Ta
 const DEFAULTS_FILE := "res://config/defaults.json"
 const LAST_FILE := "user://last-settings.json"
 const COUNTDOWN := 4.0
-const SCORES_TIME := 9.0
+## Écran des scores : chacun clique « Jeu suivant » ; la suite démarre quand tout le monde est prêt,
+## ou au bout de SCORES_MAX secondes si quelqu'un ne répond pas.
+const SCORES_MAX := 60.0
 const PODIUM_TIME := 60.0
 ## Codes de fermeture WebSocket envoyés aux clients refusés.
 const CLOSE_FULL := 4000
@@ -31,10 +33,12 @@ var game_id := ""
 var rounds: Array = []
 var round_index := 0
 var end_requested := false
+var ready := {}  # id → true : joueurs qui ont cliqué « Jeu suivant » sur l'écran des scores
+var _after_scores := Callable()
 var _timer_at := -1.0
 var _timer_fn := Callable()
 var _next_id := 1
-var _t0 := Time.get_ticks_usec()
+var _t0 := Config.ticks_usec()
 var _last_tick := 0.0
 var _levels_fp := ""
 var _levels_check := 0.0
@@ -81,7 +85,7 @@ static func _clean_server_cfg(raw: Dictionary, prev: Dictionary) -> Dictionary:
 
 ## Horloge serveur, en secondes.
 func now() -> float:
-	return (Time.get_ticks_usec() - _t0) / 1e6
+	return (Config.ticks_usec() - _t0) / 1e6
 
 
 func humans() -> Array:
@@ -170,6 +174,9 @@ func _remove_player(id: String) -> void:
 	if host_id == id:
 		host_id = hs[0].id
 	send_lobby()
+	if phase == "scores":
+		ready.erase(id)
+		_check_ready()
 
 
 func _set_bots(n: int) -> void:
@@ -260,6 +267,10 @@ func on_message(me: ServerPlayer, msg: Dictionary) -> void:
 		"stop", "toLobby":
 			if host and phase != "lobby":
 				to_lobby()
+		"next":
+			if phase == "scores" and not me.is_bot and me.in_round:
+				ready[me.id] = true
+				_check_ready()
 		"game":
 			if phase == "round" and me.in_round and game != null and msg.get("m") is Dictionary:
 				game.on_player_message(me.id, msg["m"])
@@ -327,6 +338,8 @@ func _clear_timer() -> void:
 
 func to_lobby() -> void:
 	_clear_timer()
+	ready.clear()
+	_after_scores = Callable()
 	phase = "lobby"
 	game = null
 	ctx = null
@@ -435,7 +448,10 @@ func _end_round() -> void:
 	game = null
 	broadcast({"t": "roundEnd", "gameId": game_id, "index": round_index, "total": rounds.size(), "results": rows, "totals": totals, "last": last})
 	send_lobby()
-	_set_timer(SCORES_TIME, func() -> void:
+	ready.clear()
+	_after_scores = func() -> void:
+		_after_scores = Callable()
+		ready.clear()
 		if last:
 			phase = "podium"
 			broadcast({"t": "podium", "totals": totals})
@@ -443,7 +459,26 @@ func _end_round() -> void:
 			_set_timer(PODIUM_TIME, to_lobby)
 		else:
 			round_index += 1
-			_start_round())
+			_start_round()
+	_set_timer(SCORES_MAX, _after_scores)
+	_check_ready()
+
+
+## Humains qu'on attend sur l'écran des scores (ceux qui ont joué la manche).
+func _awaited() -> Array:
+	return humans().filter(func(p: ServerPlayer) -> bool: return p.in_round)
+
+
+## Annonce qui est prêt ; lance la suite dès que tous les joueurs de la manche le sont.
+func _check_ready() -> void:
+	if phase != "scores" or not _after_scores.is_valid():
+		return
+	var need := _awaited()
+	var ids: Array = need.filter(func(p: ServerPlayer) -> bool: return ready.has(p.id)).map(func(p: ServerPlayer) -> String: return p.id)
+	broadcast({"t": "ready", "ids": ids, "need": need.map(func(p: ServerPlayer) -> String: return p.id)})
+	if ids.size() >= need.size():
+		_clear_timer()
+		_after_scores.call()
 
 
 ## Pas du serveur (30 Hz) : bots, règles de la manche, minuteries, relais des états.

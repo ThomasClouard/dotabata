@@ -7,7 +7,7 @@ extends Node
 
 const KEYMAP := {
 	KEY_W: "KeyW", KEY_A: "KeyA", KEY_S: "KeyS", KEY_D: "KeyD", KEY_F: "KeyF", KEY_R: "KeyR", KEY_E: "KeyE", KEY_T: "KeyT",
-	KEY_SPACE: "Space", KEY_UP: "ArrowUp", KEY_DOWN: "ArrowDown", KEY_LEFT: "ArrowLeft", KEY_RIGHT: "ArrowRight",
+	KEY_SPACE: "Space", KEY_ENTER: "Enter", KEY_KP_ENTER: "Enter", KEY_UP: "ArrowUp", KEY_DOWN: "ArrowDown", KEY_LEFT: "ArrowLeft", KEY_RIGHT: "ArrowRight",
 	KEY_1: "Digit1", KEY_2: "Digit2", KEY_3: "Digit3", KEY_KP_1: "Numpad1", KEY_KP_2: "Numpad2", KEY_KP_3: "Numpad3",
 }
 

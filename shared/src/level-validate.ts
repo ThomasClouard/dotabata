@@ -95,7 +95,8 @@ function makeNode(e: LevelElement, i: number): Node | null {
     n.topMin = Math.min(...n.parts.map((p) => p.topMin)); n.topMax = Math.max(...n.parts.map((p) => p.topMax));
     return n;
   }
-  if (e.type === 'fan') {
+  if (e.type === 'fan' || e.type === 'wind') {
+    // rafales vers le haut assez fortes (au plus fort) : colonne d'air où l'on vole, comme un ventilateur
     if (e.force[1] <= PHYS.gravity + 4) return null; // ventilateur latéral ou trop faible : simple perturbation
     n.fan = true;
     n.bottom = e.pos[1] - e.size[1] / 2;
@@ -293,6 +294,7 @@ const GLYPH: Record<string, string> = {
   roller: '=', puncher: 'K', gate: 'G', turntable: 'O', sweeper: 'Y', ferris: 'E', pistons: 'I', wreckingball: 'B', crusher: 'V', blink: 'b', hazard: 'L', boulder: 'o', fakewall: 'f',
   mud: 'm', jelly: 'j', ramp: '/', boost: '»', launcher: 'Q', jumppad: 'J', zipline: 'z', teleport: '@', bubble: 'u',
   button: 'n', door: 'D', lever: 'l', trapdoor: 't', memory: 'M', itembox: '?', coin: '*',
+  popper: 'k', geyser: 'g', rockfall: 'r',
 };
 
 /** Vue de dessus en ASCII (x vers la droite, z vers le bas). */
@@ -308,7 +310,7 @@ export function asciiPreview(level: Level, maxWidth = 72): string {
   const cell = Math.max(1, (maxX - minX) / maxWidth, (maxZ - minZ) / 160);
   const w = Math.max(1, Math.ceil((maxX - minX) / cell)), h = Math.max(1, Math.ceil((maxZ - minZ) / cell));
   const grid = Array.from({ length: h }, () => Array<string>(w).fill(' '));
-  const order = (g: string) => ('SFC'.includes(g) ? 3 : '+HP^KGYBVoQz@Dl?*'.includes(g) ? 2 : g === 'L' ? 0 : 1); // la lave reste sous les plateformes
+  const order = (g: string) => ('SFC'.includes(g) ? 3 : '+HP^KGYBVoQz@Dl?*kgr'.includes(g) ? 2 : g === 'L' ? 0 : 1); // la lave reste sous les plateformes
   const prio = Array.from({ length: h }, () => Array<number>(w).fill(0));
   for (const b of boxes) {
     const c0 = Math.floor((b.x0 - minX) / cell), c1 = Math.max(c0, Math.ceil((b.x1 - minX) / cell) - 1);

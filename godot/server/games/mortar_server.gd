@@ -43,6 +43,8 @@ var next_crate := 0.0
 var next_zone := 0.0
 var ending_at := 0.0
 var death_order := 0
+var holes_on := false  # option : les obus trouent les îles
+var holes := {}  # île → {Vector2i(cx, cz): true}
 
 
 static func rnd(a: float, b: float) -> float:
@@ -152,6 +154,21 @@ func _explode(s: Shell, pos: Array) -> void:
 			hl = 1.0
 		var f := (5.0 + 13.0 * k) * cover
 		victims.append({"id": id, "dmg": (spec["dmg"] * k + 5.0) * cover, "imp": [(dx / hl) * f, 5.0 + 5.0 * k * cover, (dz / hl) * f]})
+	# option : l'explosion au sol arrache un morceau de l'île
+	var dug: Array = []
+	if holes_on and pos[1] < 0.6:
+		var hr: float = spec["hole"]
+		for i in n:
+			var l := MortarShared.to_local(i, n, pos[0], pos[2])
+			if absf(l[0]) > MortarShared.ISLAND / 2.0 + hr or absf(l[1]) > MortarShared.ISLAND / 2.0 + hr:
+				continue
+			var h: Dictionary = holes.get(i, {})
+			for c: Vector2i in MortarShared.hole_cells(i, n, pos[0], pos[2], hr):
+				if not h.has(c):
+					h[c] = true
+					dug.append([i, c.x, c.y])
+			if not h.is_empty():
+				holes[i] = h
 	var removed: Array = []
 	for key: String in blocks.keys():
 		var blk: Dictionary = blocks[key]
@@ -162,7 +179,15 @@ func _explode(s: Shell, pos: Array) -> void:
 		if blk["hp"] <= 0:
 			blocks.erase(key)
 			removed.append(key)
-	ctx.broadcast({"t": "boom", "id": s.id, "p": pos, "r": spec["r"], "kind": s.kind, "removed": removed})
+	if not dug.is_empty():
+		# une colonne de blocs dont le pied n'a plus de sol s'écroule
+		for key: String in blocks.keys():
+			var blk: Dictionary = blocks[key]
+			var c := MortarShared.block_center(blk["plot"], blk["x"], 0, blk["z"], n)
+			if MortarShared.is_hole(holes, blk["plot"], n, c[0], c[2]):
+				blocks.erase(key)
+				removed.append(key)
+	ctx.broadcast({"t": "boom", "id": s.id, "p": pos, "r": spec["r"], "kind": s.kind, "removed": removed, "holes": dug})
 	for v: Dictionary in victims:
 		ctx.impulse(v["id"], v["imp"], 1.0)
 		_hurt(v["id"], v["dmg"], pos)
@@ -226,7 +251,7 @@ func _step_shell(s: Shell, dt: float) -> void:
 					return
 				_explode(s, s.p.duplicate())
 				return
-		if s.p[1] <= 0.0 and s.p[1] > -MortarShared.THICK:
+		if s.p[1] <= 0.0 and s.p[1] > -MortarShared.THICK and not MortarShared.is_hole(holes, i, n, s.p[0], s.p[2]):
 			_explode(s, [s.p[0], 0.05, s.p[2]])
 			return
 
@@ -288,6 +313,8 @@ func _fire(id: String, yaw: Variant, power: Variant) -> void:
 func on_start() -> Dictionary:
 	n = ctx.players.size()
 	var s := ctx.settings
+	holes_on = bool(s.get("holes", false))
+	holes = {}
 	build_end = ctx.start_at + float(s["buildTime"])
 	battle_end = build_end + float(s["battleTime"])
 	shrink_start = battle_end - minf(s["shrink"], s["battleTime"])
@@ -310,7 +337,7 @@ func on_start() -> Dictionary:
 			bot.target = [c.x, 0.0, c.z]
 			bots[p.id] = bot
 		i += 1
-	var init := {"n": n, "plots": plots, "buildEnd": build_end, "battleEnd": battle_end, "shrinkStart": shrink_start, "budget": int(s["budget"]), "hp": int(s["hp"])}
+	var init := {"n": n, "plots": plots, "buildEnd": build_end, "battleEnd": battle_end, "shrinkStart": shrink_start, "budget": int(s["budget"]), "hp": int(s["hp"]), "holes": holes_on}
 	return {"init": init, "spawns": spawns}
 
 
@@ -331,11 +358,15 @@ func on_tick(dt: float) -> void:
 		if ctx.settings.get("crates", true) and t >= next_crate and t < battle_end - 5.0:
 			next_crate = t + rnd(9, 14)
 			var live := _alive()
+			var c: Array = []
+			var m: MP = null
 			if not live.is_empty():
-				var m: MP = live[floori(randf() * live.size())][1]
+				m = live[floori(randf() * live.size())][1]
 				var cx := floori(rnd(0, MortarShared.GRID))
 				var cz := floori(rnd(0, MortarShared.GRID))
-				var c := MortarShared.block_center(m.plot, cx, MortarShared.column_height(blocks, m.plot, cx, cz), cz, n)
+				c = MortarShared.block_center(m.plot, cx, MortarShared.column_height(blocks, m.plot, cx, cz), cz, n)
+			# pas de caisse au-dessus d'un trou : on retentera plus tard
+			if m != null and not MortarShared.is_hole(holes, m.plot, n, c[0], c[2]):
 				var kind: String = ["mega", "cluster", "repair"][floori(randf() * 3)]
 				var crate := {"id": next_id, "p": [c[0], c[1] - 0.1, c[2]], "kind": kind, "landAt": t + 3.5}
 				next_id += 1
@@ -445,13 +476,21 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 		if t >= bot.next_move:
 			bot.next_move = t + rnd(1.5, 4)
 			var r := minf(3.5, MortarShared.zone_radius(t, shrink_start, battle_end) - 1.0)
-			bot.target = [c.x + rnd(-r, r), 0.0, c.z + rnd(-r, r)]
+			for k in 8:
+				bot.target = [c.x + rnd(-r, r), 0.0, c.z + rnd(-r, r)]
+				if not MortarShared.is_hole(holes, m.plot, n, bot.target[0], bot.target[2]):
+					break
 		var dx: float = bot.target[0] - b.px
 		var dz: float = bot.target[2] - b.pz
 		var d := sqrt(dx * dx + dz * dz)
 		if d > 0.5:
 			mx = (dx / d) * 0.6
 			mz = (dz / d) * 0.6
+			# un trou juste devant : on s'arrête et on choisit un autre but
+			if MortarShared.is_hole(holes, m.plot, n, b.px + dx / d * 0.7, b.pz + dz / d * 0.7):
+				mx = 0.0
+				mz = 0.0
+				bot.next_move = t
 	# le bot saute s'il pousse contre un bloc (vitesse presque nulle alors qu'il veut avancer)
 	var blocked := b.grounded and (mx != 0.0 or mz != 0.0) and sqrt(b.vx * b.vx + b.vz * b.vz) < 1.0
-	Phys.step_body(b, mx, mz, blocked, MortarShared.colliders(n, blocks, m.plot), dt)
+	Phys.step_body(b, mx, mz, blocked, MortarShared.colliders(n, blocks, m.plot, holes), dt)

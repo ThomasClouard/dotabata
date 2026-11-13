@@ -12,6 +12,7 @@ const HAZARD_FX := {
 	"lava": [0xff5400, 0xffb000, 0xffd60a, 0x5c1a00],
 	"water": [0xffffff, 0x8fd3ff, 0x1e90ff, 0xcaf0f8],
 	"acid": [0x7cff3a, 0xb5ff3a, 0x2dc653, 0xf1ff9e],
+	"floor": [0xffffff, 0xe0c9a6, 0xc9a27e, 0xf1e3c8],
 }
 const FOG_DEFAULT := "#b9c2cf"
 
@@ -19,6 +20,10 @@ var ctx: Main
 var level: Dictionary
 var recs: Array = []  # un enregistrement (Dictionary) par élément animé
 var arches: Array = []  # tubes gonflables qui « respirent »
+## Arches qui s'effacent quand la caméra s'en approche : [nœud de l'arche, rayon, transparence actuelle].
+var arch_fades: Array = []
+const ARCH_FADE_FAR := 9.0  # caméra à plus de 9 m du plan de l'arche : arche pleine
+const ARCH_FADE_NEAR := 4.0  # à moins de 4 m : arche invisible
 var hazards: Array = []
 var fog_boxes: Array = []  # brume visible de dehors (une par zone `fog`)
 var _cols0: Array  # boîtes à t = 0, pour poser poteaux et piliers au sol
@@ -97,6 +102,7 @@ func inflatable_arch(parent: Node3D, r: float, x: float, y: float, z: float, yaw
 	board.position = Vector3(0, r + 0.95, 0)
 	g.add_child(board)
 	arches.append(tube)
+	arch_fades.append([g, r, 0.0])
 
 
 # ---------- construction ----------
@@ -152,6 +158,25 @@ func build(e: Dictionary, i: int) -> Node3D:
 			rec["rods"] = rods
 			rec["anchors"] = anchors
 			rec["dir"] = Vector3(sin(yaw), 0, cos(yaw))
+		"gate" when e.get("skin", "") == "mallet":
+			# maillet qui tape : tête en bois (la boîte), manche vers le haut, qui tombe comme une guillotine
+			root = _root(e)
+			var head := _free(Node3D.new())
+			var r := minf(sy, sz) / 2.0
+			var cyl := Gfx.mesh(Shapes.cylinder(r, r, sx, 24), Gfx.mat(0xffffff, {"map": Tex.planks(), "uv": Vector2(1, 2), "rough": 0.6}), 0, 0, 0, head)
+			cyl.rotation.z = PI / 2.0
+			for s in [-1.0, 1.0]:
+				var cap := Gfx.mesh(Shapes.cylinder(r * 1.08, r * 1.08, 0.22, 24), Gfx.mat(0x8a5a33, {"rough": 0.4}), s * (sx / 2.0 - 0.1), 0, 0, head)
+				cap.rotation.z = PI / 2.0
+			var handle_h := maxf(3.0, e.get("drop", 3.0) + 1.5)
+			Gfx.mesh(Shapes.cylinder(0.2, 0.24, handle_h, 12), Gfx.mat(0xd9a066, {"rough": 0.6}), 0, r + handle_h / 2.0, 0, head)
+			Gfx.mesh(Shapes.sphere(0.3, 12, 8), Gfx.mat(0xe63946, {"rough": 0.4}), 0, r + handle_h, 0, head)
+			rec["blade"] = head
+			rec["edge"] = Gfx.mat(0xffffff)
+			rec["ropes"] = []
+			rec["top"] = _v(e).y
+			rec["mallet"] = true
+			rec["was_down"] = false
 		"gate":
 			root = _root(e)
 			var drop: float = e.get("drop", 3.0)
@@ -377,6 +402,9 @@ static func _hazard_mat(style: String) -> StandardMaterial3D:
 		return _hazard_mats[style]
 	var m: StandardMaterial3D
 	match style:
+		"floor":
+			# parquet de la maison : on y tombe de haut, on revient au checkpoint
+			m = Gfx.mat(0xffffff, {"map": Tex.planks(), "rough": 0.5})
 		"water":
 			m = Gfx.mat(0xffffff, {"map": Tex.soft("#1c7ed6", "#4dabf7"), "rough": 0.06, "metal": 0.1, "opacity": 0.88})
 		"acid":
@@ -614,6 +642,17 @@ func update(t: float, dt: float) -> void:
 				_place(blade, c)
 				# le liseré rouge s'allume juste avant la chute
 				var until := Level.gate_until_fall(e, t)
+				if rec.has("mallet"):
+					# au moment où le maillet touche : poussière, et un « bonk » si on est près
+					var down: bool = Level.gate_profile(Level.frac(t / e.get("period", 4.0) + e.get("phase", 0.0)))[0] >= 0.999
+					if down and not rec["was_down"]:
+						var hit := blade.position - Vector3(0, c.hy, 0)
+						ctx.particles.burst(hit, 12, [0xe0c9a6, 0xc9a27e, 0xffffff], 4.0, 0.12, 0.5)
+						if Vector3(ctx.body.px, ctx.body.py, ctx.body.pz).distance_to(hit) < 12.0:
+							ctx.sfx.boom(0.25)
+							ctx.shake(0.12)
+					rec["was_down"] = down
+					continue
 				var edge: StandardMaterial3D = rec["edge"]
 				edge.emission_energy_multiplier = 2.5 if until == 0.0 else (1.5 + sin(t * 30.0) * 1.2 if until < 0.8 else 0.01)
 				var yaw: float = e.get("yaw", 0.0)
@@ -702,7 +741,10 @@ func update(t: float, dt: float) -> void:
 	_update_fx(t, dt)
 	_update_fog(dt)
 	# surface des liquides qui coule doucement
-	for m: StandardMaterial3D in _hazard_mats.values():
+	for style: String in _hazard_mats:
+		if style == "floor":
+			continue
+		var m: StandardMaterial3D = _hazard_mats[style]
 		m.uv1_offset = Vector3(fposmod(t * 0.025, 1.0), 0, fposmod(t * 0.017, 1.0))
 
 
@@ -756,6 +798,8 @@ func _update_fx(t: float, dt: float) -> void:
 	if _fx_timer < 0.0:
 		_fx_timer = 0.08
 		for h: Dictionary in hazards:
+			if h["style"] == "floor":
+				continue  # un parquet ne bouillonne pas
 			var e: Dictionary = h["e"]
 			var cs: Array = HAZARD_FX[h["style"]] if HAZARD_FX.has(h["style"]) else HAZARD_FX["lava"]
 			var n := clampi(int(e["size"][0] * e["size"][2] / 40.0), 1, 3)
@@ -785,6 +829,36 @@ func _update_fx(t: float, dt: float) -> void:
 	for a: MeshInstance3D in arches:
 		var k := 1.0 + sin(t * 2.2) * 0.015
 		a.scale = Vector3(k, k, 1.0 + sin(t * 2.2 + 1.0) * 0.06)
+	_fade_arches(dt)
+
+
+## Une arche gêne la vue quand la caméra passe dessous ou juste devant : elle s'efface dès que la caméra approche de
+## son plan (dans l'emprise de l'arche), puis réapparaît une fois la caméra passée.
+func _fade_arches(dt: float) -> void:
+	var cam := ctx.camera.global_position
+	for af: Array in arch_fades:
+		var g: Node3D = af[0]
+		if not is_instance_valid(g):
+			continue
+		var r: float = af[1]
+		var lc := g.to_local(cam)  # l'arche s'étend en x (pieds en ±r), monte en y, son plan est z = 0
+		var want := 0.0
+		if absf(lc.x) < r + 2.5 and lc.y < r + 4.0 and lc.y > -3.0:
+			want = 1.0 - clampf((absf(lc.z) - ARCH_FADE_NEAR) / (ARCH_FADE_FAR - ARCH_FADE_NEAR), 0.0, 1.0)
+		var cur: float = af[2]
+		cur = move_toward(cur, want, dt * 5.0)
+		if cur == af[2]:
+			continue
+		af[2] = cur
+		g.visible = cur < 0.97
+		_set_transparency(g, cur)
+
+
+static func _set_transparency(n: Node, v: float) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).transparency = v
+	for c in n.get_children():
+		_set_transparency(c, v)
 
 
 ## Pluie de confettis pendant `seconds` au-dessus d'un point (arche d'arrivée).

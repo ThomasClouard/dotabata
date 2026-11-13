@@ -1,0 +1,647 @@
+{
+  "name": "maison",
+  "title": "Dans la maison",
+  "author": "Une jeune conceptrice",
+  "difficulty": 3,
+  "sky": "#ffd9c2",
+  "sea": "#c98846",
+  "elements": [
+    {
+      "type": "deco",
+      "kind": "room",
+      "pos": [
+        0,
+        3.5,
+        68
+      ],
+      "size": [
+        64,
+        30,
+        168
+      ]
+    },
+    {
+      "type": "hazard",
+      "style": "floor",
+      "pos": [
+        0,
+        -12,
+        68
+      ],
+      "size": [
+        64,
+        1,
+        168
+      ]
+    },
+    {
+      "id": "table-1",
+      "type": "platform",
+      "skin": "table",
+      "pos": [
+        0,
+        -0.5,
+        13
+      ],
+      "size": [
+        12,
+        1,
+        26
+      ]
+    },
+    {
+      "id": "depart",
+      "type": "start",
+      "skin": "notebook",
+      "pos": [
+        0,
+        0.2,
+        4.5
+      ],
+      "size": [
+        9,
+        0.4,
+        8
+      ]
+    },
+    {
+      "id": "pot-de-fleurs",
+      "type": "platform",
+      "skin": "flowerpot",
+      "pos": [
+        -1.7,
+        0.9,
+        11.5
+      ],
+      "size": [
+        2.6,
+        1.8,
+        2.6
+      ]
+    },
+    {
+      "id": "cahier",
+      "type": "platform",
+      "skin": "notebook",
+      "color": "#ff4d6d",
+      "pos": [
+        1.6,
+        0.25,
+        16
+      ],
+      "size": [
+        4.6,
+        0.5,
+        3.4
+      ],
+      "yaw": 0.25
+    },
+    {
+      "type": "coin",
+      "pos": [
+        1.6,
+        1.4,
+        16
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "trousse",
+      "type": "platform",
+      "skin": "pencilcase",
+      "pos": [
+        -1.4,
+        0.55,
+        21
+      ],
+      "size": [
+        5,
+        1.1,
+        1.8
+      ],
+      "yaw": -0.15
+    },
+    {
+      "id": "crayon",
+      "type": "platform",
+      "skin": "pencil",
+      "pos": [
+        0,
+        -0.55,
+        32.5
+      ],
+      "size": [
+        1.2,
+        1.2,
+        13
+      ]
+    },
+    {
+      "type": "coin",
+      "pos": [
+        0,
+        1,
+        32.5
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "type": "sign",
+      "pos": [
+        3,
+        1.2,
+        25
+      ],
+      "size": [
+        2.6,
+        1.1,
+        0.2
+      ],
+      "yaw": 3.141592653589793,
+      "text": "Le pont-crayon : pas de travers !"
+    },
+    {
+      "id": "table-2",
+      "type": "platform",
+      "skin": "table",
+      "pos": [
+        0,
+        -1.5,
+        50
+      ],
+      "size": [
+        12,
+        1,
+        24
+      ]
+    },
+    {
+      "id": "tourne-disque",
+      "type": "turntable",
+      "skin": "record",
+      "pos": [
+        0,
+        -0.5,
+        44
+      ],
+      "size": [
+        9,
+        1,
+        9
+      ],
+      "speed": -1.2
+    },
+    {
+      "id": "bras",
+      "type": "platform",
+      "skin": "tonearm",
+      "pos": [
+        2.05,
+        0.3,
+        44.5
+      ],
+      "size": [
+        7.1,
+        0.45,
+        0.45
+      ]
+    },
+    {
+      "type": "checkpoint",
+      "pos": [
+        0,
+        -0.75,
+        55
+      ],
+      "size": [
+        7,
+        0.5,
+        6
+      ]
+    },
+    {
+      "id": "table-3",
+      "type": "platform",
+      "skin": "table",
+      "pos": [
+        0,
+        -0.5,
+        74
+      ],
+      "size": [
+        12,
+        1,
+        20
+      ]
+    },
+    {
+      "id": "castors",
+      "type": "popper",
+      "pos": [
+        0,
+        0.7,
+        73
+      ],
+      "size": [
+        9,
+        1.4,
+        11
+      ],
+      "cols": 3,
+      "rows": 4,
+      "period": 2.4,
+      "up": 0.45,
+      "chance": 0.5
+    },
+    {
+      "id": "maillet-gauche",
+      "type": "hammer",
+      "skin": "mallet",
+      "strike": 1,
+      "axis": "x",
+      "pos": [
+        -6.6,
+        0.8,
+        71.6
+      ],
+      "size": [
+        1.8,
+        1.6,
+        1.6
+      ],
+      "length": 6.6,
+      "period": 2.6
+    },
+    {
+      "id": "maillet-droit",
+      "type": "hammer",
+      "skin": "mallet",
+      "strike": -1,
+      "axis": "x",
+      "pos": [
+        6.6,
+        0.8,
+        74.4
+      ],
+      "size": [
+        1.8,
+        1.6,
+        1.6
+      ],
+      "length": 3.6,
+      "period": 2.6,
+      "phase": 0.5
+    },
+    {
+      "type": "sign",
+      "pos": [
+        -3.6,
+        1.4,
+        65
+      ],
+      "size": [
+        2.6,
+        1.1,
+        0.2
+      ],
+      "yaw": 3.141592653589793,
+      "text": "Attention aux castors !"
+    },
+    {
+      "id": "marche",
+      "type": "platform",
+      "skin": "pencilcase",
+      "pos": [
+        0,
+        0.6,
+        82
+      ],
+      "size": [
+        5,
+        1.2,
+        3
+      ],
+      "color": "#4cc9f0"
+    },
+    {
+      "id": "tele",
+      "type": "platform",
+      "skin": "tv",
+      "pos": [
+        0,
+        1.3,
+        89.5
+      ],
+      "size": [
+        5,
+        2.6,
+        8
+      ]
+    },
+    {
+      "type": "coin",
+      "pos": [
+        0,
+        3.6,
+        89.5
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "table-4",
+      "type": "platform",
+      "skin": "table",
+      "pos": [
+        0,
+        0.6,
+        99.5
+      ],
+      "size": [
+        8,
+        1,
+        8
+      ]
+    },
+    {
+      "type": "checkpoint",
+      "skin": "notebook",
+      "pos": [
+        0,
+        1.35,
+        99.5
+      ],
+      "size": [
+        7,
+        0.5,
+        6
+      ]
+    },
+    {
+      "type": "deco",
+      "kind": "rack",
+      "pos": [
+        0,
+        -4.75,
+        111.5
+      ],
+      "size": [
+        17,
+        13.5,
+        6.5
+      ],
+      "yaw": 1.5707963267948966
+    },
+    {
+      "type": "platform",
+      "skin": "wire",
+      "pos": [
+        -2,
+        1.85,
+        111.5
+      ],
+      "size": [
+        17,
+        0.3,
+        0.5
+      ],
+      "yaw": 1.5707963267948966
+    },
+    {
+      "type": "platform",
+      "skin": "wire",
+      "pos": [
+        0,
+        1.85,
+        111.5
+      ],
+      "size": [
+        17,
+        0.3,
+        0.5
+      ],
+      "yaw": 1.5707963267948966
+    },
+    {
+      "type": "platform",
+      "skin": "wire",
+      "pos": [
+        2,
+        1.85,
+        111.5
+      ],
+      "size": [
+        17,
+        0.3,
+        0.5
+      ],
+      "yaw": 1.5707963267948966
+    },
+    {
+      "type": "sign",
+      "pos": [
+        3.8,
+        2.9,
+        101
+      ],
+      "size": [
+        2.4,
+        1.1,
+        0.2
+      ],
+      "yaw": 3.141592653589793,
+      "text": "Marche sur le fil !"
+    },
+    {
+      "type": "coin",
+      "pos": [
+        0,
+        3.2,
+        111.5
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "tabouret",
+      "type": "platform",
+      "skin": "table",
+      "pos": [
+        0,
+        -0.5,
+        126
+      ],
+      "size": [
+        8,
+        1,
+        8
+      ]
+    },
+    {
+      "id": "pot",
+      "type": "platform",
+      "skin": "pot",
+      "pos": [
+        0,
+        1,
+        126
+      ],
+      "size": [
+        6,
+        2,
+        6
+      ]
+    },
+    {
+      "type": "deco",
+      "kind": "stem",
+      "pos": [
+        0,
+        5.55,
+        126
+      ],
+      "size": [
+        0.9,
+        7.1,
+        0.9
+      ]
+    },
+    {
+      "id": "feuille-1",
+      "type": "platform",
+      "skin": "leaf",
+      "pos": [
+        0,
+        3,
+        121.6
+      ],
+      "size": [
+        3.2,
+        0.5,
+        2.2
+      ],
+      "yaw": 1.57
+    },
+    {
+      "id": "feuille-2",
+      "type": "platform",
+      "skin": "leaf",
+      "pos": [
+        -3.81,
+        4.25,
+        123.8
+      ],
+      "size": [
+        3.2,
+        0.5,
+        2.2
+      ],
+      "yaw": 2.62
+    },
+    {
+      "id": "feuille-3",
+      "type": "platform",
+      "skin": "leaf",
+      "pos": [
+        -3.81,
+        5.5,
+        128.2
+      ],
+      "size": [
+        3.2,
+        0.5,
+        2.2
+      ],
+      "yaw": -2.62
+    },
+    {
+      "id": "feuille-4",
+      "type": "platform",
+      "skin": "leaf",
+      "pos": [
+        0,
+        6.75,
+        130.4
+      ],
+      "size": [
+        3.2,
+        0.5,
+        2.2
+      ],
+      "yaw": -1.57
+    },
+    {
+      "id": "feuille-5",
+      "type": "platform",
+      "skin": "leaf",
+      "pos": [
+        3.81,
+        8,
+        128.2
+      ],
+      "size": [
+        3.2,
+        0.5,
+        2.2
+      ],
+      "yaw": -0.52
+    },
+    {
+      "type": "coin",
+      "pos": [
+        -3.81,
+        6.4,
+        128.2
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "coeur",
+      "type": "turntable",
+      "skin": "sunflower",
+      "pos": [
+        0,
+        9.1,
+        126
+      ],
+      "size": [
+        6,
+        0.8,
+        6
+      ],
+      "speed": 0.5
+    },
+    {
+      "type": "finish",
+      "pos": [
+        -8.2,
+        9,
+        126
+      ],
+      "size": [
+        7,
+        1,
+        5
+      ],
+      "yaw": -1.57
+    }
+  ]
+}

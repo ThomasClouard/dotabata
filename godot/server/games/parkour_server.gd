@@ -3,7 +3,7 @@ extends ServerGame
 ## Parcours délirant — autorité serveur : checkpoints, arrivées, chrono, classement, bots.
 
 ## Cibles sans surface : on y entre (ventilateur) ou elles nous emportent (canon, téléporteur, tyrolienne).
-const ZONE_TARGETS := ["fan", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]
+const ZONE_TARGETS := ["fan", "wind", "launcher", "teleport", "zipline", "lever", "itembox", "coin"]
 const ITEM := ParkourShared.ITEM
 ## Mode « meilleur temps » : délai entre l'arrivée et le retour automatique au départ.
 const RESTART_DELAY := 3.0
@@ -59,10 +59,11 @@ var levers: Array = []
 var memories: Array = []
 var boxes: Array = []
 var coin_els: Array = []
+var geysers: Array = []
 var finished_count := 0
 var best_mode := false  # réglage « mode » : false = premier arrivé, true = meilleur temps (on recommence à volonté)
 var _cols: Array = []
-var _solid: Array = []  # sans les `hazard` : les bots ne prennent pas la lave pour un sol
+var _solid: Array = []  # sans les `hazard` ni les jets de lave : les bots ne prennent pas la lave pour un sol
 var _cols_at := -1.0
 ## Tirage des boîtes surprise (→ [0, 1[), remplaçable par les tests.
 var item_roll: Callable = randf
@@ -84,7 +85,7 @@ func colliders() -> Array:
 	var t := ctx.now()
 	if t != _cols_at:
 		_cols = Level.build_colliders(level, t, st)
-		_solid = _cols.filter(func(c: Phys.Col) -> bool: return c.tag != "hazard")
+		_solid = _cols.filter(func(c: Phys.Col) -> bool: return c.tag != "hazard" and c.tag != "geyser")
 		_cols_at = t
 	return _cols
 
@@ -585,6 +586,7 @@ func start_with(lv: Dictionary) -> Dictionary:
 	memories = _by_type("memory")
 	boxes = _by_type("itembox")
 	coin_els = _by_type("coin")
+	geysers = _by_type("geyser")
 	for i: int in memories:
 		var e: Dictionary = els[i]
 		traps[i] = ParkourShared.memory_layout(e["cols"], e["rows"], e["traps"], randf)
@@ -690,7 +692,7 @@ func on_player_message(id: String, msg: Dictionary) -> void:
 		_use_item(id)
 	elif mt == "restart":
 		restart(id, msg.get("to") == "start")
-	elif mt == "killed" and is_int and int(mi) >= 0 and int(mi) < els.size() and els[int(mi)]["type"] == "hazard":
+	elif mt == "killed" and is_int and int(mi) >= 0 and int(mi) < els.size() and els[int(mi)]["type"] in ["hazard", "geyser"]:
 		_relay_killed(id, int(mi))
 
 
@@ -817,7 +819,7 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 		var top: float = b.py if zone else (col.cy + col.hy if col else Level.top_of(el))
 		if el["type"] == "ramp":
 			top = Level.ramp_top_at(el, b.px, b.pz)  # hauteur du bord de rampe le plus proche
-		if el["type"] == "fan" and absf(b.px - el["pos"][0]) < el["size"][0] / 2.0 and absf(b.pz - el["pos"][2]) < el["size"][2] / 2.0 and b.py > el["pos"][1] + el["size"][1] / 2.0 - 2.0:
+		if (el["type"] == "fan" or el["type"] == "wind") and absf(b.px - el["pos"][0]) < el["size"][0] / 2.0 and absf(b.pz - el["pos"][2]) < el["size"][2] / 2.0 and b.py > el["pos"][1] + el["size"][1] / 2.0 - 2.0:
 			bot.path_idx += 1
 		var dx := tcx - b.px
 		var dz := tcz - b.pz
@@ -869,6 +871,12 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 		# tyrolienne trop haute pour l'attraper en marchant dessous : on saute
 		if el["type"] == "zipline" and b.grounded and d < 1.2 and el["pos"][1] - Phys.ZIP_HANG - b.py > 0.6:
 			jump = true
+		# bloqué par un petit obstacle hors du chemin (trousse, livre posé sur une table) : on saute dessus / par-dessus
+		if b.grounded and not jump and not waiting and (mx != 0.0 or mz != 0.0) and _hypot(b.vx - b.gvx, b.vz - b.gvz) < 1.5:
+			var reach_up := Phys.jump_height() * b.jump_k * 0.85
+			var ahead := Phys.ground_below(b.px + ux * 0.75, b.py + reach_up, b.pz + uz * 0.75, _solid)
+			if ahead > b.py + 0.25 and ahead < b.py + reach_up:
+				jump = true
 		# pistons : on grimpe sur la dalle voisine si elle est plus haute
 		if b.grounded and not jump and ((ground_el != null and ground_el["type"] == "pistons") or el["type"] == "pistons"):
 			if Phys.ground_below(b.px + ux * 0.7, b.py + 1.1, b.pz + uz * 0.7, _solid) > b.py + 0.3:
@@ -890,6 +898,22 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 				continue  # loin, ou déjà dessous : on fonce
 			var clear := c.cy - c.hy > b.py + 1.7 and Level.gate_until_fall(g, t) > 0.9
 			if not clear and ux * -gx + uz * -gz > 0.0:
+				mx = 0.0
+				mz = 0.0
+				jump = false
+				waiting = true
+		# jet de lave entre nous et la cible : on attend qu'il s'éteigne, avec le temps de passer avant le suivant
+		for gi: int in geysers:
+			var g: Dictionary = els[gi]
+			var gp: Array = g["pos"]
+			var gsz: Array = g["size"]
+			if gp[1] + gsz[1] / 2.0 < b.py or gp[1] - gsz[1] / 2.0 > b.py + Phys.jump_height() + Phys.HEIGHT:
+				continue
+			var gc := Phys.Col.box(gi, gp[0], gp[1], gp[2], gsz[0] / 2.0, gsz[1] / 2.0, gsz[2] / 2.0, g.get("yaw", 0.0))
+			if _hypot(gp[0] - b.px, gp[2] - b.pz) > 7.0 or not _seg_hits(b.px, b.pz, tcx, tcz, gc, 0.7):
+				continue
+			var gs := Level.geyser_state(g, t)
+			if gs["active"] or gs["left"] < 1.2:
 				mx = 0.0
 				mz = 0.0
 				jump = false

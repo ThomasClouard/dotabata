@@ -10,6 +10,11 @@ const FLY_CAM := 9.0
 const FOV := 58.0
 const ZOOM_FOV := 16.0  # visée précise : longue-vue
 const ZOOM_SENS := 0.22  # et souris ralentie
+## Point visé : à cette distance sur l'axe du tir. Avec ou sans zoom, la caméra regarde exactement ce point : la mire
+## reste sur la même cible quand on zoome ou dézoome.
+const AIM_DIST := 80.0
+const LAND_CAM := 1.4  # atterrissage : durée du passage de la caméra de vol à la caméra au sol (s)
+const TURN_RATE := 9.0  # vitesse à laquelle les personnages pivotent vers leur orientation (vol ↔ debout)
 
 var ctx: Main
 var planets: Array = []
@@ -44,11 +49,22 @@ var _cam_init := false
 var _restore := {}
 var _armed := false
 var _burn_sent := false
+var thrust := Vector3.ZERO  # rétro-fusées : direction de la poussée (monde), zéro si éteintes
+var _thrust_sent := Vector3.ZERO
+var _thrust_at := 0.0
+var thrust_of := {}  # id → direction de poussée des autres joueurs
+var launch_up := {}  # id → « haut » au décollage (le dos du personnage en vol)
+var _rot := {}  # id → orientation affichée (lissée)
+var _cam_look := Vector3.ZERO
+var _cam_up := Vector3.UP
+var _land_t := -10.0
+var _land_from := {}  # caméra au moment du contact : {pos, look, up}
 
 var gear := {}  # id → {flames: [MeshInstance3D], root: [Node3D]}
 var labels: Array = []  # [Label3D, index de planète]
 var zoom := 0.0  # 0 : caméra normale, 1 : visée précise (clic droit / LT)
 var reticle: Control
+var _cross: Control
 var dots: MultiMeshInstance3D
 var dot_mat: StandardMaterial3D
 
@@ -276,9 +292,25 @@ func _build_hud() -> void:
 	reticle = CenterContainer.new()
 	reticle.set_anchors_preset(Control.PRESET_FULL_RECT)
 	reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cross := UI.label("+", 44, Color.WHITE)
-	cross.add_theme_constant_override("outline_size", 8)
-	cross.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	# croix dessinée (deux traits cerclés de noir), centrée au pixel près sur le centre de l'écran
+	var cross := Control.new()
+	cross.custom_minimum_size = Vector2(36, 36)
+	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for bar: Rect2 in [Rect2(0, 16, 36, 4), Rect2(16, 0, 4, 36)]:
+		var shadow := ColorRect.new()
+		shadow.color = Color(0, 0, 0, 0.6)
+		shadow.position = bar.position - Vector2(2, 2)
+		shadow.size = bar.size + Vector2(4, 4)
+		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cross.add_child(shadow)
+	for bar: Rect2 in [Rect2(0, 16, 36, 4), Rect2(16, 0, 4, 36)]:
+		var line := ColorRect.new()
+		line.color = Color("#ffe066")  # jaune, comme les pointillés : ne se confond pas avec les noms des planètes
+		line.position = bar.position
+		line.size = bar.size
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cross.add_child(line)
+	_cross = cross
 	reticle.add_child(cross)
 	reticle.visible = false
 	ctx.ui.hud.add_child(reticle)
@@ -297,8 +329,8 @@ func _hud(t: float) -> void:
 	else:
 		top.text = "Vol : %d s" % ceili(maxf(0.0, flight_end - t))
 		if status == "fly":
-			hint.text = ("Stick droit : regarder · %s : viser précisément · %s (maintenu) : rétro-fusées, la trajectoire tourne vers où tu regardes" % [Pad.label(Pad.bindings.get("retirer", Pad.LT)), Pad.label(Pad.bindings.get("sauter", JOY_BUTTON_A))]) if pad \
-				else "Souris : regarder · Clic droit : viser précisément · Espace (maintenu) : rétro-fusées, la trajectoire tourne vers où tu regardes"
+			hint.text = ("Stick gauche : rétro-fusées (haut, bas, gauche, droite) · Stick droit : regarder · %s : viser précisément" % Pad.label(Pad.bindings.get("retirer", Pad.LT))) if pad \
+				else "Z Q S D : rétro-fusées (haut, bas, gauche, droite) · Souris : regarder · Clic droit : viser précisément"
 			b_text.text = "Carburant" if fuel > 0.0 else "Plus de carburant !"
 		elif status == "landed":
 			hint.text = "Bien posé ! On attend les autres…"
@@ -376,8 +408,9 @@ func post_step(b: Phys.Body, _contacts: Array, dt: float) -> void:
 		v = SpaceShared.aim_dir(up0, fwd, elev) * SpaceShared.SPEED
 	if status == "fly" or status == "lost":
 		var turn := Vector3.ZERO
-		if status == "fly" and burning:
-			turn = _aim()
+		if status == "fly" and burning and thrust != Vector3.ZERO:
+			# la poussée fait tourner la trajectoire vers le côté poussé (la vitesse ne change pas)
+			turn = (v.normalized() + thrust).normalized()
 			fuel = maxf(0.0, fuel - dt)
 		var s := SpaceShared.step(p, v, dt, planets, gravity, turn)
 		p = s[0]
@@ -445,6 +478,8 @@ func _launch(p: Vector3) -> void:
 	_want_launch = false
 	status_of[ctx.my_id] = {"s": "fly"}
 	launch_at[ctx.my_id] = ctx.now()
+	launch_up[ctx.my_id] = p.normalized()
+	_armed = false
 	ctx.send_game({"t": "launch"})
 	var up := p.normalized()
 	f_up = up
@@ -468,6 +503,10 @@ func _touch_down(h: int, p: Vector3) -> void:
 	var hf := look - up * look.dot(up)
 	fwd = hf.normalized() if hf.length() > 0.05 else SpaceShared.tangent_frame(up)[0]
 	elev = deg_to_rad(25.0)
+	thrust = Vector3.ZERO
+	# la caméra de vol rejoint en douceur celle du sol (au lieu de sauter d'un coup)
+	_land_from = {"pos": _cam_pos, "look": _cam_look, "up": _cam_up}
+	_land_t = ctx.now()
 	ctx.sfx.land()
 	ctx.shake(0.5)
 	ctx.particles.burst(p, 24, [planets[h]["color"], 0xffffff], 5.0, 0.2, 0.8, 0.0)
@@ -475,9 +514,25 @@ func _touch_down(h: int, p: Vector3) -> void:
 
 
 func _send_burn() -> void:
-	if burning != _burn_sent:
+	var t := ctx.now()
+	var turned := burning and thrust.distance_to(_thrust_sent) > 0.35 and t - _thrust_at > 0.12
+	if burning != _burn_sent or turned:
 		_burn_sent = burning
-		ctx.send_game({"t": "burn", "on": burning})
+		_thrust_sent = thrust
+		_thrust_at = t
+		var d := [snappedf(thrust.x, 0.01), snappedf(thrust.y, 0.01), snappedf(thrust.z, 0.01)]
+		ctx.send_game({"t": "burn", "on": burning, "d": d})
+
+
+## Repère de vol : [direction du vol, dos du personnage, sa droite]. Le dos reste tourné vers le « haut » du
+## décollage, qui est aussi le haut de la caméra : le personnage vole sur le ventre.
+func _fly_frame(v: Vector3, back_ref: Vector3) -> Array:
+	var f := v.normalized() if v.length_squared() > 1e-6 else _aim()
+	var back := back_ref - f * back_ref.dot(f)
+	if back.length_squared() < 0.01:
+		back = SpaceShared.tangent_frame(f)[0]
+	back = back.normalized()
+	return [f, back, f.cross(back)]
 
 
 ## Collision entre astronautes en vol : rebond élastique (masses égales), appliqué au pas suivant.
@@ -538,11 +593,16 @@ func on_message(m: Dictionary) -> void:
 				ctx.sfx.xylo()
 		"burn":
 			burn_of[m["id"]] = m["on"]
+			var d: Variant = m.get("d")
+			thrust_of[m["id"]] = Vector3(d[0], d[1], d[2]) if d is Array and d.size() == 3 else Vector3.ZERO
 		"launch":
 			var id: String = m["id"]
 			if id != ctx.my_id:
 				status_of[id] = {"s": "fly"}
 				launch_at[id] = ctx.now()
+				var lp: ClientPlayer = ctx.players.get(id)
+				if lp:
+					launch_up[id] = SpaceShared.up_at(lp.pos, planets)
 
 
 # ---------- image ----------
@@ -565,10 +625,19 @@ func on_frame(dt: float) -> void:
 	if status == "fly" or status == "lost":
 		fl_yaw += dyaw
 		fl_pitch = clampf(fl_pitch - dpitch, -1.45, 1.45)
-		# Espace déjà enfoncé au décollage (saut) : il faut le relâcher avant d'allumer les rétro-fusées
-		if not inp.down("Space"):
+		# rétro-fusées au stick gauche (ou Z Q S D) : la poussée va dans la direction du stick, la flamme sort du côté
+		# opposé (haut : par le ventre, vers le dos ; bas : par le dos, vers le ventre ; gauche / droite : par le flanc)
+		var sx := Main._b2i(inp.down("KeyD")) - Main._b2i(inp.down("KeyA")) + inp.move.x
+		var sy := Main._b2i(inp.down("KeyW")) - Main._b2i(inp.down("KeyS")) - inp.move.y
+		var st := Vector2(sx, sy).limit_length(1.0)
+		# stick déjà poussé au décollage (on marchait) : il faut le relâcher avant d'allumer les rétro-fusées
+		if st.length() < 0.25:
 			_armed = true
-		burning = status == "fly" and _armed and fuel > 0.0 and inp.down("Space")
+		burning = status == "fly" and _armed and fuel > 0.0 and st.length() >= 0.25
+		thrust = Vector3.ZERO
+		if burning:
+			var fr := _fly_frame(_cur_v, f_up)
+			thrust = (fr[1] * st.y + fr[2] * st.x).normalized()
 		_send_burn()
 	else:
 		var up := _up()
@@ -633,7 +702,7 @@ func _place_labels() -> void:
 		e[0].position = c + to_cam.normalized() * r + cam.basis.y * (r * 1.15)
 
 
-func _orient_players(_dt: float) -> void:
+func _orient_players(dt: float) -> void:
 	for id: String in ctx.players:
 		var p: ClientPlayer = ctx.players[id]
 		var up: Vector3
@@ -643,8 +712,10 @@ func _orient_players(_dt: float) -> void:
 		if id == ctx.my_id:
 			flying = status == "fly" or (status == "lost" and _cur_v.length() > 1.0)
 			if flying:
-				up = _cur_v.normalized() if _cur_v.length() > 1.0 else _aim()
-				f = f_up
+				# en vol : la tête dans le sens du vol, le ventre vers le bas (le dos vers le haut de la caméra)
+				var fr := _fly_frame(_cur_v, f_up)
+				up = fr[0]
+				f = -fr[1]
 			else:
 				up = _up()
 				f = fwd
@@ -652,8 +723,9 @@ func _orient_players(_dt: float) -> void:
 			var i := SpaceShared.nearest(pos, planets)
 			flying = pos.distance_to(_center(i)) - float(planets[i]["r"]) > 1.5
 			if flying and p.net_v.length() > 1.0:
-				up = p.net_v.normalized()
-				f = SpaceShared.tangent_frame(up)[0]
+				var fr := _fly_frame(p.net_v, launch_up.get(id, SpaceShared.up_at(pos, planets)))
+				up = fr[0]
+				f = -fr[1]
 			else:
 				up = SpaceShared.up_at(pos, planets)
 				f = SpaceShared.fwd_of(up, p.yaw)
@@ -661,16 +733,33 @@ func _orient_players(_dt: float) -> void:
 		if f.length_squared() < 1e-6:
 			f = SpaceShared.tangent_frame(up)[0]
 		f = f.normalized()
-		p.chr.basis = Basis(up.cross(f), up, f)
+		# on pivote en douceur : à l'atterrissage, le personnage se redresse au lieu d'apparaître debout d'un coup
+		var want := Basis(up.cross(f), up, f).get_rotation_quaternion()
+		var q: Quaternion = _rot.get(id, want)
+		q = q.slerp(want, 1.0 - exp(-TURN_RATE * dt)).normalized()
+		_rot[id] = q
+		p.chr.basis = Basis(q)
 		var g: Dictionary = gear.get(id, {})
-		var on: bool = (burning if id == ctx.my_id else burn_of.get(id, false)) or (status_of.get(id, {}).get("s", "") == "fly" and ctx.now() - launch_at.get(id, -10.0) < 0.9)
+		var burn_on: bool = burning if id == ctx.my_id else burn_of.get(id, false)
+		var push: Vector3 = thrust if id == ctx.my_id else thrust_of.get(id, Vector3.ZERO)
+		var launching: bool = status_of.get(id, {}).get("s", "") == "fly" and ctx.now() - launch_at.get(id, -10.0) < 0.9
+		# les fusées du dos s'allument au décollage, et quand on pousse vers le ventre
+		var belly := p.chr.basis.z.normalized()
+		var on: bool = launching or (burn_on and push.dot(belly) > 0.5)
 		for fl: MeshInstance3D in g.get("flames", []):
 			if is_instance_valid(fl):
 				fl.visible = on
 				fl.scale = Vector3(1, randf_range(0.7, 1.3), 1)
-		if on and randf() < 0.5:
+		if launching and randf() < 0.5:
 			var back := p.chr.to_global(Vector3(0, 0.6, -0.35))
 			ctx.particles.emit(back.x, back.y, back.z, 0, 0, 0, 0xffa94d, 0.18, 0.4, 0.0)
+		if burn_on and push != Vector3.ZERO:
+			# jet de la rétro-fusée : il sort du côté opposé à la poussée
+			var mid := p.chr.to_global(Vector3(0, 0.55, 0))
+			for k in 2:
+				var o := mid - push * randf_range(0.45, 0.6) + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.15
+				var jv := -push * randf_range(4.0, 6.5)
+				ctx.particles.emit(o.x, o.y, o.z, jv.x, jv.y, jv.z, 0xffa94d if k == 0 else 0xffe066, 0.16, 0.35, 0.0)
 
 
 func _camera(dt: float) -> void:
@@ -682,43 +771,62 @@ func _camera(dt: float) -> void:
 		up = f_up
 		var c := _cur_p + l.cross(f_up).cross(l).normalized() * 0.8
 		cam_pos = c - l * FLY_CAM + up * 1.2
-		look_at = c + l * 8.0
+		# le centre de l'écran est le point regardé, avec ou sans zoom
+		look_at = _cur_p + l * AIM_DIST
 		if zoom > 0.0:
 			# visée précise : la caméra se place sur l'axe exact de la direction regardée
 			cam_pos = cam_pos.lerp(_cur_p - l * 1.0, zoom)
-			look_at = look_at.lerp(_cur_p + l * 200.0, zoom)
 	else:
 		up = _up()
 		# la caméra suit la visée sans trop lever le nez : on garde l'horizon (et les planètes) en vue
 		var head := _cur_p + up * 1.4
-		var lc := SpaceShared.aim_dir(up, fwd, elev * 0.6)
+		# la caméra se place derrière le personnage (un peu moins haut que la visée, pour qu'il reste à l'image)
+		var lc := SpaceShared.aim_dir(up, fwd, elev * 0.8)
 		# un peu au-dessus de l'épaule droite, pour voir les pointillés partir devant le personnage
 		var right := fwd.cross(up).normalized() * 1.1
 		cam_pos = head - lc * CAM_DIST + up * 1.0 + right
-		look_at = head + lc * 10.0 + right * 0.6
+		# et regarde exactement le point visé : la mire est au même endroit avec ou sans zoom
+		var o := _cur_p + up * 0.3
+		look_at = o + l * AIM_DIST
 		if zoom > 0.0:
 			# visée précise : la caméra se place juste derrière le point de départ, sur l'axe exact du tir
-			var o := _cur_p + up * 0.3
 			cam_pos = cam_pos.lerp(o - l * 1.0, zoom)
-			look_at = look_at.lerp(o + l * 200.0, zoom)
 		# jamais sous la surface
 		var i := SpaceShared.nearest(cam_pos, planets)
 		var c := _center(i)
 		var minr: float = float(planets[i]["r"]) + 0.8
 		if cam_pos.distance_to(c) < minr:
 			cam_pos = c + (cam_pos - c).normalized() * minr
-	if not _cam_init or _cam_pos.distance_to(cam_pos) > 30.0:
+	var k := (ctx.now() - _land_t) / LAND_CAM
+	if status == "landed" and k < 1.0 and not _land_from.is_empty():
+		# atterrissage : de la caméra de vol à celle du sol, en douceur (position, visée et haut de l'image)
+		var e := k * k * (3.0 - 2.0 * k)
+		_cam_pos = (_land_from["pos"] as Vector3).lerp(cam_pos, e)
+		look_at = (_land_from["look"] as Vector3).lerp(look_at, e)
+		up = (_land_from["up"] as Vector3).slerp(up.normalized(), e).normalized()
+		var ci := SpaceShared.nearest(_cam_pos, planets)
+		var cc := _center(ci)
+		var cr: float = float(planets[ci]["r"]) + 0.8
+		if _cam_pos.distance_to(cc) < cr:
+			_cam_pos = cc + (_cam_pos - cc).normalized() * cr
+	elif not _cam_init or _cam_pos.distance_to(cam_pos) > 30.0:
 		_cam_pos = cam_pos
 		_cam_init = true
 	else:
 		_cam_pos = _cam_pos.lerp(cam_pos, 1.0 - exp(-lerpf(18.0, 60.0, zoom) * dt))
+	_cam_look = look_at
+	_cam_up = up.normalized()
 	var shake := ctx._shake
 	var jit := Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * shake if shake > 0.01 else Vector3.ZERO
 	if (look_at - _cam_pos).cross(up).length_squared() < 1e-6:
 		up = SpaceShared.tangent_frame(up)[0]
 	ctx.camera.look_at_from_position(_cam_pos + jit, look_at, up)
 	ctx.camera.fov = lerpf(FOV, ZOOM_FOV, zoom)
-	reticle.visible = zoom > 0.6
+	# mire : petite et discrète sans zoom, grande en visée précise
+	reticle.visible = status == "aim" or status == "fly"
+	_cross.modulate.a = lerpf(0.85, 1.0, zoom)
+	_cross.pivot_offset = _cross.size / 2.0
+	_cross.scale = Vector2.ONE * lerpf(0.65, 1.0, zoom)
 	# son propre personnage gênerait la vue dans l'axe
 	var me := ctx.me()
 	if me and zoom > 0.6:

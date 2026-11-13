@@ -28,7 +28,7 @@ const NO_BOX := ["fan", "fakewall", "deco", "sign", "fog", "launcher", "teleport
 const PICKUPS := ["lever", "itembox", "coin"]
 ## Durée de l'animation d'ouverture / fermeture des portes et trappes.
 const DOOR_ANIM := 0.3
-const HITTERS := ["hammer", "spinner", "cannon", "puncher", "gate", "sweeper", "wreckingball", "boulder"]
+const HITTERS := ["hammer", "spinner", "cannon", "puncher", "gate", "sweeper", "wreckingball", "boulder", "popper", "rockfall"]
 
 
 ## Partie fractionnaire positive (frac du TS).
@@ -246,6 +246,114 @@ static func boulder_balls(e: Dictionary, t: float) -> Array:
 		var k: float = ((f + j) * interval) / travel
 		out.append([_part(e["pos"][0] + delta[0] * k, e["pos"][1] + delta[1] * k, e["pos"][2] + delta[2] * k, hb, hb, hb, yaw, delta[0] / travel, delta[1] / travel, delta[2] / travel), k, (length * k) / r])
 		j += 1
+	return out
+
+
+# —— vague 4 : castors, jets de lave, chutes de pierres (portées de shared/src/level.ts) ——
+
+const M32 := 0xffffffff
+## Temps de pose d'une pierre tombée avant qu'elle s'émiette (s).
+const ROCK_REST := 0.4
+
+
+## Hachage entier déterministe de (a, b) vers [0, 1), identique au TS (hash01) : mêmes tirages partout.
+static func hash01(a: int, b: int) -> float:
+	var h := ((a * 73856093) & M32) ^ ((b * 19349663) & M32)
+	h = h ^ (h >> 16)
+	h = (h * 0x45d9f3b) & M32
+	h = h ^ (h >> 16)
+	h = (h * 0x45d9f3b) & M32
+	h = h ^ (h >> 16)
+	return float(h) / 4294967296.0
+
+
+## Sortie d'un castor sur la fraction v de sa sortie : [ext, dext/dv] (jaillit 15 %, reste 60 %, redescend 25 %).
+static func popper_profile(v: float) -> Array:
+	if v < 0.0 or v >= 1.0:
+		return [0.0, 0.0]
+	if v < 0.15:
+		return [v / 0.15, 1.0 / 0.15]
+	if v < 0.75:
+		return [1.0, 0.0]
+	return [(1.0 - v) / 0.25, -1.0 / 0.25]
+
+
+## Castor du trou k à l'instant t : { ext, dext (par seconde), warn (va sortir dans < 0.6 s) }. seed = index de l'élément.
+static func popper_state(e: Dictionary, k: int, t: float, seed: int) -> Dictionary:
+	var period: float = e.get("period", 2.4)
+	var up: float = e.get("up", 0.45)
+	var chance: float = e.get("chance", 0.45)
+	var s: float = t / period + e.get("phase", 0.0) + hash01(seed, k)
+	var n := int(floorf(s))
+	var u := s - floorf(s)
+	var key := seed * 64 + k
+	var active := hash01(key, n) < chance
+	var pr: Array = popper_profile(u / up) if active else [0.0, 0.0]
+	var warn := not active and hash01(key, n + 1) < chance and (1.0 - u) * period < 0.6
+	return {"ext": pr[0], "dext": pr[1] / (up * period), "warn": warn}
+
+
+## Castors sortis : [[boîte, k], …] (le bas de la boîte de l'élément est la surface du plateau).
+static func popper_parts(e: Dictionary, t: float, seed: int) -> Array:
+	var out: Array = []
+	var cols := int(e.get("cols", 3))
+	var rows := int(e.get("rows", 3))
+	var size: Array = e["size"]
+	var pw: float = size[0] / cols
+	var pd: float = size[2] / rows
+	var hy: float = size[1] / 2.0
+	var hw := 0.32 * minf(pw, pd)
+	var yaw: float = e.get("yaw", 0.0)
+	for row in rows:
+		for col in cols:
+			var k := row * cols + col
+			var st := popper_state(e, k, t, seed)
+			var ext: float = st["ext"]
+			if ext <= 0.02:
+				continue
+			var p := _to_world(e, -size[0] / 2.0 + (col + 0.5) * pw, -2.0 * hy * (1.0 - ext), -size[2] / 2.0 + (row + 0.5) * pd)
+			out.append([_part(p[0], p[1], p[2], hw, hy, hw, yaw, 0.0, 2.0 * hy * st["dext"], 0.0), k])
+	return out
+
+
+## Jet de lave : { active, u, left, warn } (éruption pendant la fraction on du début de cycle ; warn : dans < 1 s).
+static func geyser_state(e: Dictionary, t: float) -> Dictionary:
+	var period: float = e.get("period", 4.0)
+	var on: float = e.get("on", 0.4)
+	var u := frac(t / period + e.get("phase", 0.0))
+	if u < on:
+		return {"active": true, "u": u, "left": (on - u) * period, "warn": false}
+	var left := (1.0 - u) * period
+	return {"active": false, "u": u, "left": left, "warn": left < 1.0}
+
+
+## Pierres de la chute de pierres : [[boîte, k, f (avancement de la chute, ≥ 1 : posée), x, z (point d'impact)], …].
+static func rockfall_stones(e: Dictionary, t: float, seed: int) -> Array:
+	var out: Array = []
+	var interval: float = e.get("interval", 3.0)
+	var warn: float = e.get("warn", 1.4)
+	var stone: float = e.get("stone", 1.0)
+	var count := int(e.get("count", 2))
+	var size: Array = e["size"]
+	var s: float = t / interval + e.get("phase", 0.0)
+	var n := int(floorf(s))
+	var tau := (s - floorf(s)) * interval
+	var r := stone / 2.0
+	var hb := 0.8 * r
+	var big_h: float = size[1]
+	var ground: float = e["pos"][1] - big_h / 2.0
+	for k in count:
+		var tk := tau - k * 0.35
+		if tk < 0.0 or tk >= warn + ROCK_REST:
+			continue
+		var key := seed * 16 + k
+		var lx := (hash01(key, 2 * n) - 0.5) * maxf(0.0, size[0] - stone)
+		var lz := (hash01(key, 2 * n + 1) - 0.5) * maxf(0.0, size[2] - stone)
+		var p := _to_world(e, lx, 0.0, lz)
+		var f := tk / warn
+		var y := ground + r + big_h * (1.0 - f * f) if f < 1.0 else ground + r
+		var vy := (-2.0 * big_h * f) / warn if f < 1.0 else 0.0
+		out.append([_part(p[0], y, p[2], hb, hb, hb, 0.0, 0.0, vy, 0.0), k, f, p[0], p[2]])
 	return out
 
 
@@ -570,6 +678,17 @@ static func build_colliders(level: Dictionary, t: float, state: Dictionary = {})
 				ps = [wrecking_ball(e, t)]
 			"gate":
 				ps = [gate_part(e, t)]
+			"popper":
+				ps = []
+				for b: Array in popper_parts(e, t, i):
+					ps.append(b[0])
+			"rockfall":
+				ps = []
+				for b: Array in rockfall_stones(e, t, i):
+					ps.append(b[0])
+			"geyser":
+				if not geyser_state(e, t)["active"]:
+					continue
 			"door", "trapdoor":
 				if link_open(st, e["link"], t):
 					continue  # ouverte : escamotée
@@ -637,6 +756,12 @@ static func build_colliders(level: Dictionary, t: float, state: Dictionary = {})
 				var ph: float = (t / period + e.get("phase", 0.0)) * TAU
 				var a := amp * sin(ph)
 				var da := (amp * cos(ph) * TAU) / period
+				var strike := int(e.get("strike", 0))
+				if strike != 0:
+					# marteau qui tape : de la verticale (en haut) à l'horizontale (posé), au rythme d'une guillotine
+					var gp := gate_profile(frac(t / period + e.get("phase", 0.0)))
+					a = strike * (PI - (PI / 2.0) * gp[0])
+					da = (-strike * (PI / 2.0) * gp[1]) / period
 				var ax := 1.0 if e.get("axis", "x") == "x" else 0.0
 				var az := 1.0 - ax
 				var l: float = e.get("length", 5.0)

@@ -14,7 +14,7 @@ const DEFAULTS := {
 	"conveyor": {"speed": 4},
 	"crumble": {"delay": 0.5, "respawn": 4},
 	"spinner": {"speed": 1.5, "phase": 0},
-	"hammer": {"length": 5, "axis": "x", "amplitude": 1.1, "period": 3, "phase": 0},
+	"hammer": {"length": 5, "axis": "x", "amplitude": 1.1, "period": 3, "phase": 0, "strike": 0},
 	"fan": {"force": [0, 42, 0]},
 	"cannon": {"stroke": 3, "period": 3, "phase": 0},
 	"roller": {"speed": 3},
@@ -61,7 +61,7 @@ const REQUIRED := {
 	"teleport": ["to"], "button": ["link"], "door": ["link"], "lever": ["link"], "trapdoor": ["link"],
 }
 ## Champs entiers (le JSON les lit en flottants).
-const INTS := ["count", "cols", "rows"]
+const INTS := ["count", "cols", "rows", "strike"]
 
 static var _re: RegEx
 

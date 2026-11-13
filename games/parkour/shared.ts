@@ -40,7 +40,7 @@ function hitFactor(c: Contact): number {
   const speed = Math.hypot(c.cv[0], c.cv[2]);
   const side = !c.ground;
   switch (c.tag) {
-    case 'hammer': return speed > 1.5 ? 1.25 : 0;
+    case 'hammer': return speed > 1.5 || c.cv[1] < -3 ? 1.25 : 0; // balayage, ou coup de marteau qui s'abat
     case 'spinner': case 'sweeper': return side && speed > 1 ? 1.4 : 0;
     case 'cannon': case 'puncher': return side && speed > 2 ? 1.1 : 0;
     case 'wreckingball': return speed > 1.5 ? 1.3 : 0;
@@ -132,12 +132,12 @@ export function parkourPostStep(b: Body, contacts: Contact[]): ContactEvents {
     if (b.shield > 0) continue; // bouclier : aucune frappe
     const k = hitFactor(c);
     if (k <= 0) continue;
-    if (c.tag === 'gate' || c.tag === 'popper' || c.tag === 'rockfall') {
+    if (c.tag === 'gate' || c.tag === 'popper' || c.tag === 'rockfall' || (c.tag === 'hammer' && Math.hypot(c.cv[0], c.cv[2]) <= 1.5)) {
       // poussée verticale : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
       let dx = c.n[0], dz = c.n[2], d = Math.hypot(dx, dz);
       if (d < 0.3) { dx = -b.v[0]; dz = -b.v[2]; d = Math.hypot(dx, dz); }
       if (d < 0.1) { dx = 0; dz = 1; d = 1; }
-      const sp = c.tag === 'gate' ? 7 : c.tag === 'popper' ? 4.5 : 6;
+      const sp = c.tag === 'gate' ? 7 : c.tag === 'popper' ? 4.5 : 6; // marteau qui s'abat : comme une pierre
       b.v[0] = (dx / d) * sp; b.v[2] = (dz / d) * sp;
       // lame : plaqué au sol ; castor : projeté en l'air ; pierre : petit bond
       b.v[1] = c.tag === 'gate' ? Math.min(b.v[1], 0) : c.tag === 'popper' ? Math.max(b.v[1], 8) : Math.max(b.v[1], 3);

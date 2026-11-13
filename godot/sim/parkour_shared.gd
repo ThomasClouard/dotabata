@@ -102,7 +102,7 @@ static func hit_factor(c: Phys.Contact) -> float:
 	var side := not c.ground
 	match c.tag:
 		"hammer":
-			return 1.25 if speed > 1.5 else 0.0
+			return 1.25 if speed > 1.5 or c.cvy < -3.0 else 0.0  # balayage, ou coup de marteau qui s'abat
 		"spinner", "sweeper":
 			return 1.4 if side and speed > 1.0 else 0.0
 		"cannon", "puncher":
@@ -147,7 +147,7 @@ static func post_step(b: Phys.Body, contacts: Array) -> Dictionary:
 		var k := hit_factor(c)
 		if k <= 0.0:
 			continue
-		if c.tag == "gate" or c.tag == "popper" or c.tag == "rockfall":
+		if c.tag == "gate" or c.tag == "popper" or c.tag == "rockfall" or (c.tag == "hammer" and sqrt(c.cvx * c.cvx + c.cvz * c.cvz) <= 1.5):
 			# poussée verticale : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
 			var dx := c.nx
 			var dz := c.nz

@@ -243,36 +243,40 @@
     },
     {
       "id": "maillet-gauche",
-      "type": "gate",
+      "type": "hammer",
       "skin": "mallet",
+      "strike": 1,
+      "axis": "x",
       "pos": [
-        -3,
-        3.8,
-        73
+        -6.6,
+        0.8,
+        71.6
       ],
       "size": [
-        2.6,
+        1.8,
         1.6,
         1.6
       ],
-      "drop": 3,
+      "length": 3.6,
       "period": 2.6
     },
     {
       "id": "maillet-droit",
-      "type": "gate",
+      "type": "hammer",
       "skin": "mallet",
+      "strike": -1,
+      "axis": "x",
       "pos": [
-        3,
-        3.8,
-        75
+        6.6,
+        0.8,
+        74.4
       ],
       "size": [
-        2.6,
+        1.8,
         1.6,
         1.6
       ],
-      "drop": 3,
+      "length": 3.6,
       "period": 2.6,
       "phase": 0.5
     },

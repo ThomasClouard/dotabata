@@ -186,9 +186,14 @@ func _build(e: Dictionary, i: int) -> Node3D:
 				var cap := Gfx.mesh(Shapes.cylinder(r * 1.08, r * 1.08, 0.22, 24), Gfx.mat(0x8a5a33 if mallet else 0xffd60a, {"rough": 0.3}), s * (sx / 2.0 - 0.1) if on_x else 0.0, 0, 0.0 if on_x else s * (sz / 2.0 - 0.1), g)
 				cap.rotation = rot
 			arms[i] = Gfx.mesh(Shapes.cylinder(0.18 if mallet else 0.13, 0.18 if mallet else 0.13, 1.0, 10), Gfx.mat(0xd9a066, {"rough": 0.6}) if mallet else Gfx.mat(0x5c6470, {"metal": 0.6, "rough": 0.3}), 0, 0, 0, ctx.world)
-			# potence : une poutre au-dessus du pivot
-			Gfx.mesh(Shapes.rbox(0.5 if on_x else 3.4, 0.4, 3.4 if on_x else 0.5, 0.15), Gfx.mat(0x3d4450, {"metal": 0.4, "rough": 0.4}), pos.x, pos.y + 0.1, pos.z, ctx.world)
-			Gfx.mesh(Shapes.sphere(0.34, 14, 10), Gfx.mat(0xffd60a, {"metal": 0.3, "rough": 0.25}), pos.x, pos.y, pos.z, ctx.world)
+			if int(e.get("strike", 0)) != 0:
+				# marteau qui tape : charnière au bout du manche (sur un plot), pas de potence
+				Gfx.mesh(Shapes.rbox(1.0, pos.y + 0.6, 1.0, 0.15), Gfx.mat(0x8a5a33, {"rough": 0.6}), pos.x, pos.y / 2.0 - 0.3 + 0.3, pos.z, ctx.world)
+				Gfx.mesh(Shapes.sphere(0.36, 14, 10), Gfx.mat(0xe63946 if mallet else 0xffd60a, {"rough": 0.3}), pos.x, pos.y, pos.z, ctx.world)
+			else:
+				# potence : une poutre au-dessus du pivot
+				Gfx.mesh(Shapes.rbox(0.5 if on_x else 3.4, 0.4, 3.4 if on_x else 0.5, 0.15), Gfx.mat(0x3d4450, {"metal": 0.4, "rough": 0.4}), pos.x, pos.y + 0.1, pos.z, ctx.world)
+				Gfx.mesh(Shapes.sphere(0.34, 14, 10), Gfx.mat(0xffd60a, {"metal": 0.3, "rough": 0.25}), pos.x, pos.y, pos.z, ctx.world)
 			return g
 		"cannon":
 			var g := _put(e, Node3D.new())

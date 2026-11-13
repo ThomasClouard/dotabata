@@ -871,6 +871,12 @@ func bot_tick(pl: ServerPlayer, dt: float) -> void:
 		# tyrolienne trop haute pour l'attraper en marchant dessous : on saute
 		if el["type"] == "zipline" and b.grounded and d < 1.2 and el["pos"][1] - Phys.ZIP_HANG - b.py > 0.6:
 			jump = true
+		# bloqué par un petit obstacle hors du chemin (trousse, livre posé sur une table) : on saute dessus / par-dessus
+		if b.grounded and not jump and not waiting and (mx != 0.0 or mz != 0.0) and _hypot(b.vx - b.gvx, b.vz - b.gvz) < 1.5:
+			var reach_up := Phys.jump_height() * b.jump_k * 0.85
+			var ahead := Phys.ground_below(b.px + ux * 0.75, b.py + reach_up, b.pz + uz * 0.75, _solid)
+			if ahead > b.py + 0.25 and ahead < b.py + reach_up:
+				jump = true
 		# pistons : on grimpe sur la dalle voisine si elle est plus haute
 		if b.grounded and not jump and ((ground_el != null and ground_el["type"] == "pistons") or el["type"] == "pistons"):
 			if Phys.ground_below(b.px + ux * 0.7, b.py + 1.1, b.pz + uz * 0.7, _solid) > b.py + 0.3:

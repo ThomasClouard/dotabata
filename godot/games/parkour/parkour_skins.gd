@@ -640,6 +640,7 @@ func _rockfall(e: Dictionary, rec: Dictionary) -> Node3D:
 	shadow_m.no_depth_test = false
 	var stones := []
 	var shadows := []
+	rec["stone_mat"] = sm
 	for k in int(e.get("count", 2)):
 		var s := _free(Gfx.mesh(Shapes.icosphere(stone / 2.0, 1), sm))
 		s.visible = false
@@ -810,6 +811,7 @@ func update(t: float, dt: float) -> void:
 				continue
 			"rockfall":
 				_update_rockfall(rec, e, t)
+				_update_shards(rec, dt)
 				continue
 			"deco":
 				_update_deco(rec, t)
@@ -987,13 +989,13 @@ func _update_rockfall(rec: Dictionary, e: Dictionary, t: float) -> void:
 			var r := stone * (0.25 + 0.4 * f)
 			sh.transform = Transform3D(Basis.from_scale(Vector3(r, 1.0, r)), Vector3(s[3], ground + 0.04, s[4]))
 		else:
+			# la pierre éclate en touchant le sol : elle disparaît et vole en morceaux
 			sh.visible = false
-			var k2 := clampf((f - 1.0) * warn / Level.ROCK_REST, 0.0, 1.0)
-			n.position = Vector3(c.cx, c.cy - k2 * stone * 0.3, c.cz)
-			n.scale = Vector3(1.0 + k2 * 0.4, maxf(0.05, 1.0 - k2), 1.0 + k2 * 0.4)
+			n.visible = false
 			if float(prev.get(k, 0.0)) < 1.0:
-				var w := Vector3(c.cx, ground + 0.2, c.cz)
-				ctx.particles.burst(w, 14, [0x8d7a70, 0x5c4d47, 0xff7b1c], 5.0, 0.14, 0.6)
+				var w := Vector3(c.cx, ground + stone * 0.5, c.cz)
+				_burst_stone(rec, w, stone, ground)
+				ctx.particles.burst(w - Vector3(0, stone * 0.4, 0), 18, [0x8d7a70, 0xb3a49b, 0xff7b1c], 4.0, 0.16, 0.6, 3.0, 0.3)
 				var me := Vector3(ctx.body.px, ctx.body.py, ctx.body.pz)
 				if me.distance_to(w) < 10.0:
 					ctx.sfx.crumble()
@@ -1004,6 +1006,58 @@ func _update_rockfall(rec: Dictionary, e: Dictionary, t: float) -> void:
 			stones[k].visible = false
 			shadows[k].visible = false
 			prev[k] = 0.0
+
+
+## Une pierre qui éclate : petits éclats irréguliers projetés au ras du sol, qui rebondissent une fois puis s'effacent.
+func _burst_stone(rec: Dictionary, w: Vector3, stone: float, ground: float) -> void:
+	var shards: Array = rec.get("shards", [])
+	var n := 7
+	for k in n:
+		var r := stone * (0.12 + randf() * 0.1)
+		var node: MeshInstance3D = null
+		for s: Dictionary in shards:
+			if s["life"] <= 0.0:
+				node = s["node"]
+				shards.erase(s)
+				break
+		if node == null:
+			node = _free(Gfx.mesh(Shapes.icosphere(1.0, 0), rec["stone_mat"]))
+		var a := (k + randf() * 0.6) * TAU / n
+		var sp := 2.5 + randf() * 2.5
+		node.visible = true
+		node.position = w + Vector3(cos(a), 0, sin(a)) * stone * 0.25
+		node.scale = Vector3(r, r * (0.6 + randf() * 0.5), r * (0.8 + randf() * 0.4))
+		shards.append({"node": node, "vel": Vector3(cos(a) * sp, 2.0 + randf() * 2.5, sin(a) * sp), "spin": Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 16.0, "life": 0.9 + randf() * 0.3, "r": r, "ground": ground, "bounced": false})
+	rec["shards"] = shards
+
+
+func _update_shards(rec: Dictionary, dt: float) -> void:
+	for s: Dictionary in rec.get("shards", []):
+		if s["life"] <= 0.0:
+			continue
+		var node: MeshInstance3D = s["node"]
+		s["life"] -= dt
+		if s["life"] <= 0.0:
+			node.visible = false
+			continue
+		var v: Vector3 = s["vel"]
+		v.y -= 22.0 * dt
+		var p := node.position + v * dt
+		var floor_y: float = s["ground"] + s["r"] * 0.6
+		if p.y < floor_y:
+			p.y = floor_y
+			if s["bounced"]:
+				v = Vector3(v.x * 0.6, 0.0, v.z * 0.6)
+			else:
+				v = Vector3(v.x * 0.5, -v.y * 0.35, v.z * 0.5)
+				s["bounced"] = true
+		s["vel"] = v
+		node.position = p
+		node.rotation += s["spin"] * dt
+		# rétrécit pendant le dernier tiers de sa vie
+		var k := clampf(s["life"] / 0.35, 0.0, 1.0)
+		var r: float = s["r"]
+		node.scale = node.scale.normalized() * r * sqrt(3.0) * k if k < 1.0 else node.scale
 
 
 func _update_deco(rec: Dictionary, t: float) -> void:

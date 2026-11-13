@@ -256,8 +256,13 @@ func toast(text: String, seconds := 1.8) -> void:
 
 # ---------- voile central ----------
 
-func _fill_overlay(children: Array, width := 440.0) -> VBoxContainer:
+## animate = false : la fenêtre est déjà affichée et on ne fait qu'en remplacer le contenu (pas d'animation d'ouverture).
+var _settings_shown := false  # la fenêtre centrale affiche les réglages de la partie
+
+
+func _fill_overlay(children: Array, width := 440.0, animate := true) -> VBoxContainer:
 	_tab = ""  # la carte centrale ne montre plus les réglages de la partie
+	_settings_shown = false
 	_overlay_card.custom_minimum_size.x = width
 	for c in _overlay_card.get_children():
 		_overlay_card.remove_child(c)
@@ -268,12 +273,14 @@ func _fill_overlay(children: Array, width := 440.0) -> VBoxContainer:
 		v.add_child(c)
 	_overlay_card.add_child(v)
 	overlay.visible = true
-	UI.pop_in(_overlay_card, 0.0, 0.85, 0.3)
+	if animate:
+		UI.pop_in(_overlay_card, 0.0, 0.85, 0.3)
 	return v
 
 
 func hide_overlay() -> void:
 	_tab = ""
+	_settings_shown = false
 	overlay.visible = false
 
 
@@ -769,6 +776,8 @@ func _switch_tab(dir: int) -> void:
 
 
 func _build_settings() -> void:
+	# déjà ouverte (changement d'un réglage, d'onglet, mise à jour du lobby) : on remplace le contenu sans la refaire apparaître
+	var refresh := overlay.visible and _settings_shown
 	var m := _lobby_m
 	var host: bool = m["hostId"] == _lobby_me
 	var s: Dictionary = m["settings"].duplicate(true)
@@ -837,8 +846,9 @@ func _build_settings() -> void:
 	foot.add_child(UI.button("Terminé", "big", func() -> void: close_game_settings.call_deferred()))
 	kids.append(foot)
 
-	_fill_overlay(kids, 620)
+	_fill_overlay(kids, 620, not refresh)
 	_tab = tab
+	_settings_shown = true
 	if pad_nav:
 		_pad_focusables(_overlay_card, true)
 		_restore_focus(_overlay_card, keep_focus)

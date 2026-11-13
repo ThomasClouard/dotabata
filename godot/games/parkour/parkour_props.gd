@@ -20,6 +20,10 @@ var ctx: Main
 var level: Dictionary
 var recs: Array = []  # un enregistrement (Dictionary) par élément animé
 var arches: Array = []  # tubes gonflables qui « respirent »
+## Arches qui s'effacent quand la caméra s'en approche : [nœud de l'arche, rayon, transparence actuelle].
+var arch_fades: Array = []
+const ARCH_FADE_FAR := 9.0  # caméra à plus de 9 m du plan de l'arche : arche pleine
+const ARCH_FADE_NEAR := 4.0  # à moins de 4 m : arche invisible
 var hazards: Array = []
 var fog_boxes: Array = []  # brume visible de dehors (une par zone `fog`)
 var _cols0: Array  # boîtes à t = 0, pour poser poteaux et piliers au sol
@@ -98,6 +102,7 @@ func inflatable_arch(parent: Node3D, r: float, x: float, y: float, z: float, yaw
 	board.position = Vector3(0, r + 0.95, 0)
 	g.add_child(board)
 	arches.append(tube)
+	arch_fades.append([g, r, 0.0])
 
 
 # ---------- construction ----------
@@ -824,6 +829,36 @@ func _update_fx(t: float, dt: float) -> void:
 	for a: MeshInstance3D in arches:
 		var k := 1.0 + sin(t * 2.2) * 0.015
 		a.scale = Vector3(k, k, 1.0 + sin(t * 2.2 + 1.0) * 0.06)
+	_fade_arches(dt)
+
+
+## Une arche gêne la vue quand la caméra passe dessous ou juste devant : elle s'efface dès que la caméra approche de
+## son plan (dans l'emprise de l'arche), puis réapparaît une fois la caméra passée.
+func _fade_arches(dt: float) -> void:
+	var cam := ctx.camera.global_position
+	for af: Array in arch_fades:
+		var g: Node3D = af[0]
+		if not is_instance_valid(g):
+			continue
+		var r: float = af[1]
+		var lc := g.to_local(cam)  # l'arche s'étend en x (pieds en ±r), monte en y, son plan est z = 0
+		var want := 0.0
+		if absf(lc.x) < r + 2.5 and lc.y < r + 4.0 and lc.y > -3.0:
+			want = 1.0 - clampf((absf(lc.z) - ARCH_FADE_NEAR) / (ARCH_FADE_FAR - ARCH_FADE_NEAR), 0.0, 1.0)
+		var cur: float = af[2]
+		cur = move_toward(cur, want, dt * 5.0)
+		if cur == af[2]:
+			continue
+		af[2] = cur
+		g.visible = cur < 0.97
+		_set_transparency(g, cur)
+
+
+static func _set_transparency(n: Node, v: float) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).transparency = v
+	for c in n.get_children():
+		_set_transparency(c, v)
 
 
 ## Pluie de confettis pendant `seconds` au-dessus d'un point (arche d'arrivée).

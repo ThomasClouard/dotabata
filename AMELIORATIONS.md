@@ -36,5 +36,5 @@ Liste des corrections et améliorations à faire.
 
 ## Parcours délirant
 
-- [ ] **Arche du départ** : elle gêne la vue quand la caméra s'en approche. Soit lui donner une autre forme, soit
+- [x] **Arche du départ** : elle gêne la vue quand la caméra s'en approche. Soit lui donner une autre forme, soit
   la faire disparaître beaucoup plus tôt quand la caméra approche.

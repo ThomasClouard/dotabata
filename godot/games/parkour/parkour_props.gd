@@ -12,6 +12,7 @@ const HAZARD_FX := {
 	"lava": [0xff5400, 0xffb000, 0xffd60a, 0x5c1a00],
 	"water": [0xffffff, 0x8fd3ff, 0x1e90ff, 0xcaf0f8],
 	"acid": [0x7cff3a, 0xb5ff3a, 0x2dc653, 0xf1ff9e],
+	"floor": [0xffffff, 0xe0c9a6, 0xc9a27e, 0xf1e3c8],
 }
 const FOG_DEFAULT := "#b9c2cf"
 
@@ -377,6 +378,9 @@ static func _hazard_mat(style: String) -> StandardMaterial3D:
 		return _hazard_mats[style]
 	var m: StandardMaterial3D
 	match style:
+		"floor":
+			# parquet de la maison : on y tombe de haut, on revient au checkpoint
+			m = Gfx.mat(0xffffff, {"map": Tex.planks(), "rough": 0.5})
 		"water":
 			m = Gfx.mat(0xffffff, {"map": Tex.soft("#1c7ed6", "#4dabf7"), "rough": 0.06, "metal": 0.1, "opacity": 0.88})
 		"acid":
@@ -702,7 +706,10 @@ func update(t: float, dt: float) -> void:
 	_update_fx(t, dt)
 	_update_fog(dt)
 	# surface des liquides qui coule doucement
-	for m: StandardMaterial3D in _hazard_mats.values():
+	for style: String in _hazard_mats:
+		if style == "floor":
+			continue
+		var m: StandardMaterial3D = _hazard_mats[style]
 		m.uv1_offset = Vector3(fposmod(t * 0.025, 1.0), 0, fposmod(t * 0.017, 1.0))
 
 
@@ -756,6 +763,8 @@ func _update_fx(t: float, dt: float) -> void:
 	if _fx_timer < 0.0:
 		_fx_timer = 0.08
 		for h: Dictionary in hazards:
+			if h["style"] == "floor":
+				continue  # un parquet ne bouillonne pas
 			var e: Dictionary = h["e"]
 			var cs: Array = HAZARD_FX[h["style"]] if HAZARD_FX.has(h["style"]) else HAZARD_FX["lava"]
 			var n := clampi(int(e["size"][0] * e["size"][2] / 40.0), 1, 3)

@@ -178,3 +178,42 @@ static func stone() -> ImageTexture:
 	_rect(img, 0, 4, 4, s - 8, edge)
 	_rect(img, s - 4, 4, 4, s - 8, edge)
 	return _finish(key, img)
+
+
+## Roche veinée : fond `base`, fissures de couleur `ink` (lave dans la roche du volcan).
+static func veins(base: String, ink: String) -> ImageTexture:
+	var key := "veins" + base + ink
+	if _cache.has(key):
+		return _cache[key]
+	var s := 256
+	var img := _new(s, Color(base))
+	var c := Color(ink)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	for k in 7:
+		var x := rng.randf() * s
+		var y := rng.randf() * s
+		var a := rng.randf() * TAU
+		for i in 7:
+			a += (rng.randf() - 0.5) * 1.3
+			var nx := x + cos(a) * 22.0
+			var ny := y + sin(a) * 22.0
+			for st in 12:
+				var f := st / 11.0
+				_disc(img, fposmod(lerpf(x, nx, f), s), fposmod(lerpf(y, ny, f), s), 1.8 + (1.0 - i / 7.0) * 1.4, c)
+			x = nx
+			y = ny
+	return _finish(key, img)
+
+
+## Page de cahier : lignes bleues et marge rouge.
+static func lined() -> ImageTexture:
+	var key := "lined"
+	if _cache.has(key):
+		return _cache[key]
+	var s := 128
+	var img := _new(s, Color("#fbfaf5"))
+	for k in 8:
+		_rect(img, 0, k * s / 8.0 + s / 16.0, s, 2, Color(0.45, 0.62, 0.9, 0.8))
+	_rect(img, s * 0.18, 0, 2, s, Color(0.92, 0.35, 0.4, 0.85))
+	return _finish(key, img)

@@ -13,7 +13,8 @@ var _checks := 0
 func _init() -> void:
 	_test_physics()
 	_test_levels()
-	_test_vague1()
+	_test_wave("vague1")
+	_test_wave("vague4")
 	_test_vague2()
 	_test_vague3()
 	_test_mortar()
@@ -283,20 +284,20 @@ func _check_snapshots(level: Dictionary, snaps: Array, what: String) -> void:
 
 ## Vague 1 : tous les nouveaux types (rouleaux, poinçonneurs, guillotines, plateaux, balayeurs, grande roue, pistons,
 ## boule de démolition, étau, dalles clignotantes, lave, boules, faux mur, décor, panneau, brouillard).
-func _test_vague1() -> void:
-	var g := _load("vague1.json")
+func _test_wave(name: String) -> void:
+	var g := _load(name + ".json")
 	var level: Dictionary = g["level"]
 	var els: Array = level["elements"]
 	var before := _fails
-	_check_snapshots(level, g["snapshots"], "vague1")
+	_check_snapshots(level, g["snapshots"], name)
 	# niveau brut (sans les défauts zod) : les valeurs par défaut de Godot doivent donner les mêmes boîtes
 	var raw_snaps: Array = g["snapshots"].slice(0, 12)
-	_check_snapshots(g["raw"], raw_snaps, "vague1 brut")
-	_near(Level.kill_y(g["raw"]), g["killY"], "vague1 brut killY")
-	_near(Level.kill_y(level), g["killY"], "vague1 killY")
+	_check_snapshots(g["raw"], raw_snaps, "%s brut" % name)
+	_near(Level.kill_y(g["raw"]), g["killY"], "%s brut killY" % name)
+	_near(Level.kill_y(level), g["killY"], "%s killY" % name)
 	var bottoms: Array = g["bottoms"]
 	for i in els.size():
-		_near(Level.element_bottom(els[i]), bottoms[i], "vague1 bas de l'élément %d" % i)
+		_near(Level.element_bottom(els[i]), bottoms[i], "%s bas de l'élément %d" % [name, i])
 	for f: Dictionary in g["fog"]:
 		var p: Array = f["p"]
 		var got: Variant = Level.fog_at(level, p[0], p[1], p[2])
@@ -309,7 +310,7 @@ func _test_vague1() -> void:
 		var t: float = r["t"]
 		for o: Dictionary in r["els"]:
 			var e: Dictionary = els[int(o["i"])]
-			var what := "vague1 t=%s élément %d (%s)" % [t, int(o["i"]), e["type"]]
+			var what := "%s t=%s élément %d (%s)" % [name, t, int(o["i"]), e["type"]]
 			if o.has("roll"):
 				_near(Level.roller_angle(e, t), o["roll"], what + " rotation")
 			if o.has("untilFall"):
@@ -342,6 +343,31 @@ func _test_vague1() -> void:
 						_near(c.cz, want[j]["c"][2], what + " boule z")
 						_near(balls[j][1], want[j]["k"], what + " avancée")
 						_near(balls[j][2], want[j]["roll"], what + " roulement")
+			if o.has("pop"):
+				var want: Array = o["pop"]
+				for k in want.size():
+					var ps := Level.popper_state(e, k, t, int(o["i"]))
+					_near(ps["ext"], want[k]["ext"], what + " castor %d sortie" % k)
+					_near(ps["dext"], want[k]["dext"], what + " castor %d vitesse" % k)
+					_same(ps["warn"], want[k]["warn"], what + " castor %d préavis" % k)
+			if o.has("geyser"):
+				var gs := Level.geyser_state(e, t)
+				_same(gs["active"], o["geyser"]["active"], what + " éruption")
+				_same(gs["warn"], o["geyser"]["warn"], what + " bouillonnement")
+				_near(gs["left"], o["geyser"]["left"], what + " reste")
+			if o.has("stones"):
+				var got := Level.rockfall_stones(e, t, int(o["i"]))
+				var want: Array = o["stones"]
+				if _same(got.size(), want.size(), what + " nombre de pierres"):
+					for j in got.size():
+						var c: Phys.Col = got[j][0]
+						_near(c.cy, want[j]["c"][1], what + " pierre y")
+						_same(got[j][1], int(want[j]["k"]), what + " pierre k")
+						_near(got[j][2], want[j]["f"], what + " pierre chute")
+						_near(got[j][3], want[j]["x"], what + " pierre x")
+						_near(got[j][4], want[j]["z"], what + " pierre z")
+	for h: Array in g.get("hashes", []):
+		_near(Level.hash01(int(h[0]), int(h[1])), h[2], "%s hash01(%d, %d)" % [name, int(h[0]), int(h[1])])
 
 	# course pilotée vers l'avant, avec checkpoints, lave et chutes
 	var cp_idx: Array = g["cpIdx"]
@@ -384,18 +410,18 @@ func _test_vague1() -> void:
 			b.tumble = 0.0
 		if i % 10 == 9:
 			var s: Dictionary = states[i / 10]
-			var ok := _check_body(b, s, "vague1 course pas %d" % i)
-			ok = _same(cp, int(s["cp"]), "vague1 course checkpoint pas %d" % i) and ok
-			ok = _same(ev["killed"], s["killed"], "vague1 course mort pas %d" % i) and ok
-			ok = _same(ev["hazard"], int(s["hazard"]), "vague1 course élément mortel pas %d" % i) and ok
+			var ok := _check_body(b, s, "%s course pas %d" % [name, i])
+			ok = _same(cp, int(s["cp"]), "%s course checkpoint pas %d" % [name, i]) and ok
+			ok = _same(ev["killed"], s["killed"], "%s course mort pas %d" % [name, i]) and ok
+			ok = _same(ev["hazard"], int(s["hazard"]), "%s course élément mortel pas %d" % [name, i]) and ok
 			if not ok:
 				diverged = true
 				break
 	if not diverged:
-		_same(knocks, int(g["knocks"]), "vague1 éjections")
-		_same(bounces, int(g["bounces"]), "vague1 rebonds")
-		_same(kills, int(g["kills"]), "vague1 morts")
-		_same(falls, int(g["falls"]), "vague1 chutes")
+		_same(knocks, int(g["knocks"]), "%s éjections" % name)
+		_same(bounces, int(g["bounces"]), "%s rebonds" % name)
+		_same(kills, int(g["kills"]), "%s morts" % name)
+		_same(falls, int(g["falls"]), "%s chutes" % name)
 	# lâchers et approches latérales sur chaque élément
 	var tk := 0
 	var tki := 0
@@ -420,16 +446,16 @@ func _test_vague1() -> void:
 				bo += 1
 			if ev["killed"]:
 				ki += 1
-			if i % 10 == 9 and not _check_body(db, st[i / 10], "vague1 lâcher %d sur l'élément %d (%s) pas %d" % [int(d["n"]), k, els[k]["type"], i]):
+			if i % 10 == 9 and not _check_body(db, st[i / 10], "%s lâcher %d sur l'élément %d (%s) pas %d" % [name, int(d["n"]), k, els[k]["type"], i]):
 				ok = false
 				break
 		if ok:
-			_same(kn, int(d["knocks"]), "vague1 élément %d éjections" % k)
-			_same(bo, int(d["bounces"]), "vague1 élément %d rebonds" % k)
-			_same(ki, int(d["kills"]), "vague1 élément %d morts" % k)
+			_same(kn, int(d["knocks"]), "%s élément %d éjections" % [name, k])
+			_same(bo, int(d["bounces"]), "%s élément %d rebonds" % [name, k])
+			_same(ki, int(d["kills"]), "%s élément %d morts" % [name, k])
 		tk += kn
 		tki += ki
-	print("vague 1 : %s (course : %d éjections, %d morts, %d chutes ; lâchers : %d éjections, %d morts)" % ["OK" if _fails == before else "ÉCHEC", knocks, kills, falls, tk, tki])
+	print("%s : %s (course : %d éjections, %d morts, %d chutes ; lâchers : %d éjections, %d morts)" % [name, "OK" if _fails == before else "ÉCHEC", knocks, kills, falls, tk, tki])
 
 
 func _near3(v: Variant, w: Array, what: String) -> void:

@@ -7,39 +7,44 @@ const v3 = z.tuple([z.number(), z.number(), z.number()]);
 const v2 = z.tuple([z.number(), z.number()]);
 const size = z.tuple([z.number().min(0.2).max(80), z.number().min(0.2).max(80), z.number().min(0.2).max(80)]);
 const common = { id: z.string().max(40).optional(), pos: v3, size, yaw: z.number().min(-7).max(7).default(0) };
+/** Décor et liquides : peuvent couvrir tout le niveau (murs de la maison, parquet). */
+const bigSize = z.tuple([z.number().min(0.2).max(200), z.number().min(0.2).max(200), z.number().min(0.2).max(200)]);
 const phase = z.number().min(0).max(1).default(0);
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/).optional();
 const link = z.string().min(1).max(20);
+/** Apparences (rendu seulement, la collision reste la boîte) : voir elementCatalog. */
+export const SKINS = ['table', 'notebook', 'pencilcase', 'pencil', 'record', 'tv', 'pot', 'leaf', 'sunflower', 'mallet', 'wire', 'cloud', 'plane', 'kite', 'bird', 'wing', 'heli', 'rock', 'scree'] as const;
+const skin = z.enum(SKINS).optional();
 
 export const ElementSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('start'), ...common }),
-  z.object({ type: z.literal('finish'), ...common }),
-  z.object({ type: z.literal('checkpoint'), ...common }),
-  z.object({ type: z.literal('platform'), ...common, color }),
+  z.object({ type: z.literal('start'), ...common, skin }),
+  z.object({ type: z.literal('finish'), ...common, skin }),
+  z.object({ type: z.literal('checkpoint'), ...common, skin }),
+  z.object({ type: z.literal('platform'), ...common, color, skin }),
   z.object({ type: z.literal('ice'), ...common }),
-  z.object({ type: z.literal('moving'), ...common, delta: v3, period: z.number().min(1).max(30).default(4), phase }),
+  z.object({ type: z.literal('moving'), ...common, delta: v3, period: z.number().min(1).max(30).default(4), phase, skin }),
   z.object({ type: z.literal('trampoline'), ...common, bounce: z.number().min(10).max(24).default(15) }),
   z.object({ type: z.literal('conveyor'), ...common, dir: v2, speed: z.number().min(0.5).max(10).default(4) }),
-  z.object({ type: z.literal('crumble'), ...common, delay: z.number().min(0.2).max(3).default(0.5), respawn: z.number().min(1).max(20).default(4) }),
+  z.object({ type: z.literal('crumble'), ...common, delay: z.number().min(0.2).max(3).default(0.5), respawn: z.number().min(1).max(20).default(4), skin }),
   z.object({ type: z.literal('spinner'), ...common, speed: z.number().min(-6).max(6).default(1.5), phase }),
-  z.object({ type: z.literal('hammer'), ...common, length: z.number().min(1).max(12).default(5), axis: z.enum(['x', 'z']).default('x'), amplitude: z.number().min(0.2).max(1.5).default(1.1), period: z.number().min(1).max(12).default(3), phase }),
+  z.object({ type: z.literal('hammer'), ...common, length: z.number().min(1).max(12).default(5), axis: z.enum(['x', 'z']).default('x'), amplitude: z.number().min(0.2).max(1.5).default(1.1), period: z.number().min(1).max(12).default(3), phase, skin }),
   z.object({ type: z.literal('fan'), ...common, force: v3.default([0, 42, 0]) }),
   z.object({ type: z.literal('cannon'), ...common, dir: v2, stroke: z.number().min(0.5).max(10).default(3), period: z.number().min(1).max(12).default(3), phase }),
   // —— vague 1 : obstacles et sols horlogers, décor ——
   z.object({ type: z.literal('roller'), ...common, speed: z.number().min(-8).max(8).default(3) }),
   z.object({ type: z.literal('puncher'), ...common, count: z.number().int().min(1).max(12).default(4), stroke: z.number().min(0.5).max(8).default(2.5), period: z.number().min(1).max(12).default(3), stagger: z.number().min(0).max(1).default(0.15), phase }),
   z.object({ type: z.literal('gate'), ...common, drop: z.number().min(0.5).max(20).default(3), period: z.number().min(1.5).max(20).default(4), phase }),
-  z.object({ type: z.literal('turntable'), ...common, speed: z.number().min(-3).max(3).default(0.8), phase }),
+  z.object({ type: z.literal('turntable'), ...common, speed: z.number().min(-3).max(3).default(0.8), phase, skin }),
   z.object({ type: z.literal('sweeper'), ...common, speed: z.number().min(-3).max(3).default(1.3), highOffset: z.number().min(1.6).max(4).default(2.1), phase }),
   z.object({ type: z.literal('ferris'), ...common, count: z.number().int().min(1).max(12).default(4), radius: z.number().min(1.5).max(20).default(5), period: z.number().min(4).max(60).default(14), phase }),
   z.object({ type: z.literal('pistons'), ...common, count: z.number().int().min(1).max(16).default(4), height: z.number().min(0.3).max(8).default(2), period: z.number().min(1).max(20).default(3), stagger: z.number().min(0).max(1).default(0.25), phase }),
   z.object({ type: z.literal('wreckingball'), ...common, length: z.number().min(1).max(20).default(6), angle: z.number().min(0.1).max(1.3).default(0.7), period: z.number().min(2).max(20).default(4), phase }),
   z.object({ type: z.literal('crusher'), ...common, minGap: z.number().min(1.2).max(20).default(1.4), thickness: z.number().min(0.3).max(4).default(1), period: z.number().min(1.5).max(20).default(4), phase }),
-  z.object({ type: z.literal('blink'), ...common, period: z.number().min(1.5).max(20).default(4), on: z.number().min(0.2).max(0.9).default(0.6), phase }),
-  z.object({ type: z.literal('hazard'), ...common, style: z.enum(['lava', 'water', 'acid']).default('lava') }),
+  z.object({ type: z.literal('blink'), ...common, period: z.number().min(1.5).max(20).default(4), on: z.number().min(0.2).max(0.9).default(0.6), phase, skin }),
+  z.object({ type: z.literal('hazard'), ...common, size: bigSize, style: z.enum(['lava', 'water', 'acid', 'floor']).default('lava') }),
   z.object({ type: z.literal('boulder'), ...common, delta: v3, interval: z.number().min(1).max(20).default(4), travel: z.number().min(1).max(20).default(5), phase }),
   z.object({ type: z.literal('fakewall'), ...common, color }),
-  z.object({ type: z.literal('deco'), ...common, kind: z.enum(['tree', 'rock', 'balloon', 'arrow', 'flag', 'cactus', 'mushroom', 'crystal', 'crowd']).default('tree'), color }),
+  z.object({ type: z.literal('deco'), ...common, size: bigSize, kind: z.enum(['tree', 'rock', 'balloon', 'arrow', 'flag', 'cactus', 'mushroom', 'crystal', 'crowd', 'flowers', 'stem', 'cloud', 'rack', 'room']).default('tree'), color }),
   z.object({ type: z.literal('sign'), ...common, text: z.string().max(60).default('') }),
   z.object({ type: z.literal('fog'), ...common, density: z.number().min(0).max(1).default(0.6), color }),
   // —— vague 2 : sols spéciaux et propulseurs ——
@@ -62,6 +67,10 @@ export const ElementSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('itembox'), ...common, respawn: z.number().min(2).max(60).default(6) }),
   z.object({ type: z.literal('coin'), ...common }),
   z.object({ type: z.literal('wind'), ...common, force: z.tuple([z.number().min(-40).max(40), z.number().min(-40).max(40), z.number().min(-40).max(40)]).default([24, 0, 0]), period: z.number().min(0.5).max(20).default(3), phase }),
+  // —— vague 4 : parcours dessinés (castors, jets de lave, chutes de pierres) ——
+  z.object({ type: z.literal('popper'), ...common, cols: z.number().int().min(1).max(8).default(3), rows: z.number().int().min(1).max(8).default(3), period: z.number().min(1).max(12).default(2.4), up: z.number().min(0.15).max(0.8).default(0.45), chance: z.number().min(0.1).max(1).default(0.45), phase }),
+  z.object({ type: z.literal('geyser'), ...common, period: z.number().min(2).max(20).default(4), on: z.number().min(0.15).max(0.8).default(0.4), phase }),
+  z.object({ type: z.literal('rockfall'), ...common, count: z.number().int().min(1).max(6).default(2), stone: z.number().min(0.4).max(2.5).default(1), interval: z.number().min(1.5).max(12).default(3), warn: z.number().min(0.6).max(4).default(1.4), phase }),
 ]);
 
 export const LevelSchema = z.object({
@@ -70,6 +79,7 @@ export const LevelSchema = z.object({
   author: z.string().max(40).default(''),
   difficulty: z.number().int().min(1).max(5).default(2),
   sky: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  sea: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), // mer sous le parcours (défaut : slime rose)
   killY: z.number().optional(),
   elements: z.array(ElementSchema).min(2).max(400),
 });
@@ -92,7 +102,7 @@ export const PICKUPS: ReadonlySet<ElementType> = new Set(['lever', 'itembox', 'c
 export const VISUAL_ONLY: ReadonlySet<ElementType> = new Set(['fakewall', 'deco', 'sign', 'fog']);
 
 /** Types dont le contact « frappe » le joueur (roulé-boulé) : voir parkourPostStep. */
-export const HITTERS: ReadonlySet<ElementType> = new Set(['hammer', 'spinner', 'cannon', 'puncher', 'gate', 'sweeper', 'wreckingball', 'boulder']);
+export const HITTERS: ReadonlySet<ElementType> = new Set(['hammer', 'spinner', 'cannon', 'puncher', 'gate', 'sweeper', 'wreckingball', 'boulder', 'popper', 'rockfall']);
 
 export type El<T extends ElementType> = Extract<LevelElement, { type: T }>;
 
@@ -232,6 +242,90 @@ export function boulderBalls(e: El<'boulder'>, t: number): (Part & { k: number; 
   for (let j = 0; (f + j) * e.interval < e.travel; j++) {
     const k = ((f + j) * e.interval) / e.travel;
     out.push({ c: [e.pos[0] + e.delta[0] * k, e.pos[1] + e.delta[1] * k, e.pos[2] + e.delta[2] * k], h: [hb, hb, hb], yaw, vel: [e.delta[0] / e.travel, e.delta[1] / e.travel, e.delta[2] / e.travel], k, roll: (len * k) / r });
+  }
+  return out;
+}
+
+// ———————————————————— vague 4 : castors, jets de lave, chutes de pierres ————————————————————
+
+/**
+ * Hachage entier déterministe de (a, b) vers [0, 1) : mêmes tirages « au hasard » sur le serveur et tous les clients.
+ * Calcul sur 32 bits non signés, porté à l'identique en GDScript (Level.hash01).
+ */
+export function hash01(a: number, b: number): number {
+  let h = ((a * 73856093) ^ (b * 19349663)) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  h = Math.imul(h, 0x45d9f3b) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  h = Math.imul(h, 0x45d9f3b) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
+
+/** Sortie d'un castor sur la fraction v (0..1) de sa sortie : jaillit vite (15 %), reste (60 %), redescend (25 %). Renvoie [ext, dext/dv]. */
+export function popperProfile(v: number): [number, number] {
+  if (v < 0 || v >= 1) return [0, 0];
+  if (v < 0.15) return [v / 0.15, 1 / 0.15];
+  if (v < 0.75) return [1, 0];
+  return [(1 - v) / 0.25, -1 / 0.25];
+}
+
+/**
+ * Castor du trou k (k = row·cols + col) à l'instant t : chaque trou a son cycle de `period` s (décalé au hasard) ;
+ * à chaque cycle n, le castor sort avec la probabilité `chance` pendant la fraction `up`. `warn` : il va sortir dans < 0.6 s.
+ * `seed` = index de l'élément (deux grilles du même niveau ne sont pas synchronisées).
+ */
+export function popperState(e: El<'popper'>, k: number, t: number, seed: number): { ext: number; dext: number; warn: boolean } {
+  const s = t / e.period + e.phase + hash01(seed, k), n = Math.floor(s), u = s - n, key = seed * 64 + k;
+  const active = hash01(key, n) < e.chance;
+  const [ext, dv] = active ? popperProfile(u / e.up) : [0, 0];
+  const warn = !active && hash01(key, n + 1) < e.chance && (1 - u) * e.period < 0.6;
+  return { ext, dext: dv / (e.up * e.period), warn };
+}
+
+/**
+ * Castors sortis : le bas de la boîte de l'élément est la surface du plateau ; un castor sorti remplit la boîte sur toute
+ * sa hauteur, rentré il est sous la surface (aucune boîte émise). `k` = numéro du trou.
+ */
+export function popperParts(e: El<'popper'>, t: number, seed: number): (Part & { k: number })[] {
+  const out: (Part & { k: number })[] = [], pw = e.size[0] / e.cols, pd = e.size[2] / e.rows, hy = e.size[1] / 2;
+  const hw = 0.32 * Math.min(pw, pd);
+  for (let row = 0; row < e.rows; row++) for (let col = 0; col < e.cols; col++) {
+    const k = row * e.cols + col, st = popperState(e, k, t, seed);
+    if (st.ext <= 0.02) continue;
+    out.push({ c: toWorld(e, -e.size[0] / 2 + (col + 0.5) * pw, -2 * hy * (1 - st.ext), -e.size[2] / 2 + (row + 0.5) * pd), h: [hw, hy, hw], yaw: e.yaw, vel: [0, 2 * hy * st.dext, 0], k });
+  }
+  return out;
+}
+
+/** Jet de lave : en éruption pendant la fraction `on` du début de cycle. `left` = s avant le changement ; `warn` : éruption dans < 1 s. */
+export function geyserState(e: El<'geyser'>, t: number): { active: boolean; u: number; left: number; warn: boolean } {
+  const u = frac(t / e.period + e.phase);
+  if (u < e.on) return { active: true, u, left: (e.on - u) * e.period, warn: false };
+  const left = (1 - u) * e.period;
+  return { active: false, u, left, warn: left < 1 };
+}
+
+/** Temps de pose d'une pierre tombée avant qu'elle s'émiette (s). */
+export const ROCK_REST = 0.4;
+
+/**
+ * Pierres de la chute de pierres : la boîte de l'élément est la zone (bas = sol où elles s'écrasent, haut = d'où elles tombent).
+ * Toutes les `interval` s, `count` pierres (diamètre `stone`, décalées de 0.35 s) tombent en `warn` s à des endroits tirés
+ * au hasard, puis restent ROCK_REST s au sol (sans danger). `f` = avancement de la chute (≥ 1 : posée), `x`/`z` = point d'impact.
+ */
+export function rockfallStones(e: El<'rockfall'>, t: number, seed: number): (Part & { k: number; f: number; x: number; z: number })[] {
+  const out: (Part & { k: number; f: number; x: number; z: number })[] = [];
+  const s = t / e.interval + e.phase, n = Math.floor(s), tau = (s - n) * e.interval;
+  const r = e.stone / 2, hb = 0.8 * r, H = e.size[1], ground = e.pos[1] - H / 2;
+  for (let k = 0; k < e.count; k++) {
+    const tk = tau - k * 0.35;
+    if (tk < 0 || tk >= e.warn + ROCK_REST) continue;
+    const key = seed * 16 + k;
+    const lx = (hash01(key, 2 * n) - 0.5) * Math.max(0, e.size[0] - e.stone), lz = (hash01(key, 2 * n + 1) - 0.5) * Math.max(0, e.size[2] - e.stone);
+    const p = toWorld(e, lx, 0, lz), f = tk / e.warn;
+    const y = f < 1 ? ground + r + H * (1 - f * f) : ground + r, vy = f < 1 ? (-2 * H * f) / e.warn : 0;
+    out.push({ c: [p[0], y, p[2]], h: [hb, hb, hb], yaw: 0, vel: [0, vy, 0], k, f, x: p[0], z: p[2] });
   }
   return out;
 }
@@ -541,6 +635,11 @@ export function buildColliders(level: Level, t: number, state?: Map<number, numb
       case 'boulder': return parts(i, e.type, boulderBalls(e, t));
       case 'wreckingball': return parts(i, e.type, [wreckingBall(e, t)]);
       case 'gate': return parts(i, e.type, [gatePart(e, t)]);
+      case 'popper': return parts(i, e.type, popperParts(e, t, i));
+      case 'rockfall': return parts(i, e.type, rockfallStones(e, t, i));
+      case 'geyser':
+        if (!geyserState(e, t).active) return;
+        break;
       case 'blink':
         if (!blinkState(e, t).solid) return;
         break;
@@ -678,33 +777,33 @@ export function elementCatalog() {
       note: `Écart horizontal maximal conseillé entre deux bords (marge de ${Math.round((1 - SAFETY) * 100)} % incluse). Au-delà de +${r(jumpHeight())} m de dénivelé, il faut un trampoline (simple ou directionnel), un ventilateur, une plateforme mobile verticale, des bulles, une rampe, de la gélatine, une zone lunaire, un canon à joueurs, une tyrolienne ou un téléporteur.`,
     },
     elements: [
-      { type: 'start', description: 'Dalle de départ (solide). Prévoir au moins 8 × 8 m pour 10 joueurs.', params: {} },
-      { type: 'finish', description: 'Dalle d\'arrivée (solide). La toucher termine la course.', params: {} },
-      { type: 'checkpoint', description: 'Dalle solide ; point de réapparition après une chute.', params: {} },
-      { type: 'platform', description: 'Plateforme fixe.', params: { color: 'optionnel, "#rrggbb"' } },
+      { type: 'start', description: 'Dalle de départ (solide). Prévoir au moins 8 × 8 m pour 10 joueurs.', params: { skin: SKIN_DOC } },
+      { type: 'finish', description: 'Dalle d\'arrivée (solide). La toucher termine la course.', params: { skin: SKIN_DOC } },
+      { type: 'checkpoint', description: 'Dalle solide ; point de réapparition après une chute.', params: { skin: SKIN_DOC } },
+      { type: 'platform', description: 'Plateforme fixe.', params: { color: 'optionnel, "#rrggbb"', skin: SKIN_DOC } },
       { type: 'ice', description: 'Sol glissant : très peu d\'adhérence.', params: {} },
-      { type: 'moving', description: 'Plateforme mobile qui va et vient entre pos et pos + delta.', params: { delta: '[x, y, z]', period: 'secondes pour un aller-retour (1–30, défaut 4)', phase: '0–1' } },
+      { type: 'moving', description: 'Plateforme mobile qui va et vient entre pos et pos + delta.', params: { delta: '[x, y, z]', period: 'secondes pour un aller-retour (1–30, défaut 4)', phase: '0–1', skin: SKIN_DOC } },
       { type: 'trampoline', description: 'Fait rebondir.', params: { bounce: `vitesse verticale 10–24 (défaut 15 → rebond de ${r(jumpHeight(15))} m ; 20 → ${r(jumpHeight(20))} m)` } },
       { type: 'conveyor', description: 'Tapis roulant qui entraîne le joueur.', params: { dir: '[x, z] direction', speed: 'm/s 0.5–10 (défaut 4)' } },
-      { type: 'crumble', description: 'Dalle qui s\'effondre après qu\'on a marché dessus, puis réapparaît.', params: { delay: 'secondes avant la chute (défaut 0.5)', respawn: 'secondes avant le retour (défaut 4)' } },
+      { type: 'crumble', description: 'Dalle qui s\'effondre après qu\'on a marché dessus, puis réapparaît.', params: { delay: 'secondes avant la chute (défaut 0.5)', respawn: 'secondes avant le retour (défaut 4)', skin: SKIN_DOC + ' ; "cloud" : le nuage se dissout au lieu de tomber' } },
       { type: 'spinner', description: 'Barre tournante (obstacle) : `size` est la taille de la barre, elle tourne autour de son centre. La placer 0.3–0.6 m au-dessus d\'une plateforme pour qu\'on doive sauter par-dessus.', params: { speed: 'rad/s, -6 à 6 (défaut 1.5)', phase: '0–1' } },
-      { type: 'hammer', description: 'Marteau pendule : `pos` est le pivot, `size` la tête, qui passe au plus bas à pos.y - length.', params: { length: 'longueur du bras 1–12 (défaut 5)', axis: '"x" ou "z" : direction du balancement', amplitude: 'angle max en radians 0.2–1.5 (défaut 1.1)', period: 'secondes (défaut 3)', phase: '0–1' } },
+      { type: 'hammer', description: 'Marteau pendule : `pos` est le pivot, `size` la tête, qui passe au plus bas à pos.y - length.', params: { length: 'longueur du bras 1–12 (défaut 5)', axis: '"x" ou "z" : direction du balancement', amplitude: 'angle max en radians 0.2–1.5 (défaut 1.1)', period: 'secondes (défaut 3)', phase: '0–1', skin: '"mallet" : gros maillet en bois' } },
       { type: 'fan', description: 'Ventilateur : `pos`/`size` décrivent la zone de souffle (pas de collision). Avec force.y > 24 (la gravité) il soulève le joueur jusqu\'en haut de la zone.', params: { force: '[x, y, z] accélération en m/s² (défaut [0, 42, 0])' } },
       { type: 'cannon', description: 'Canon pousseur : bloc qui jaillit périodiquement de `stroke` mètres dans la direction `dir` et éjecte les joueurs.', params: { dir: '[x, z]', stroke: 'course 0.5–10 (défaut 3)', period: 'secondes (défaut 3)', phase: '0–1' } },
       { type: 'roller', description: 'Rouleau broyeur : cylindre couché d\'axe x local, size = [longueur, diamètre, diamètre]. On peut marcher dessus ; le dessus entraîne le joueur perpendiculairement à l\'axe (vers +z local si speed > 0, comme un tapis). Pour traverser une rangée de rouleaux, orienter leur axe en travers du chemin.', params: { speed: 'vitesse de surface m/s, -8 à 8 (défaut 3) ; le signe donne le sens' } },
       { type: 'puncher', description: 'Mur poinçonneur : `count` blocs répartis le long de x local dans `size`, qui jaillissent chacun de `stroke` m vers +z local (orienter avec yaw), en vague (bloc k décalé de k × stagger cycle). Éjecte comme un canon.', params: { count: '1–12 (défaut 4)', stroke: 'course 0.5–8 (défaut 2.5)', period: 'secondes 1–12 (défaut 3)', stagger: 'décalage entre blocs, fraction de cycle 0–1 (défaut 0.15)', phase: '0–1' } },
       { type: 'gate', description: 'Porte guillotine : `pos` est la position HAUTE de la lame ; elle tombe vite de `drop` m (10 % du cycle), reste en bas (20 %), remonte lentement (40 %) puis reste en haut (30 %). Le joueur sous la lame qui tombe est éjecté. Donner une lame fine (size.z ≈ 0.5) qui barre le chemin ; en haut, son bas doit être ≥ 1.7 m au-dessus du sol pour passer dessous.', params: { drop: 'm 0.5–20 (défaut 3)', period: 'secondes 1.5–20 (défaut 4)', phase: '0–1' } },
-      { type: 'turntable', description: 'Plateforme tournante : disque horizontal de diamètre size.x et d\'épaisseur size.y (size.z ignoré) qui tourne autour de son centre et entraîne le joueur.', params: { speed: 'rad/s -3 à 3 (défaut 0.8)', phase: '0–1' } },
+      { type: 'turntable', description: 'Plateforme tournante : disque horizontal de diamètre size.x et d\'épaisseur size.y (size.z ignoré) qui tourne autour de son centre et entraîne le joueur.', params: { speed: 'rad/s -3 à 3 (défaut 0.8)', phase: '0–1', skin: '"record" (tourne-disque) ou "sunflower" (cœur de tournesol)' } },
       { type: 'sweeper', description: 'Balayeur double : deux barres de taille `size` (longueur x) qui tournent autour du même axe vertical. La basse (centrée sur pos, la placer 0.3–0.6 m au-dessus du sol) se saute ; la haute, perpendiculaire, passe à pos.y + highOffset et fauche ceux qui sautent : il faut rester au sol quand elle passe.', params: { speed: 'rad/s -3 à 3 (défaut 1.3)', highOffset: 'm 1.6–4 (défaut 2.1)', phase: '0–1' } },
       { type: 'ferris', description: 'Grande roue : `count` nacelles (taille `size`, restent horizontales) en orbite sur un cercle de rayon `radius` centré sur pos, dans le plan vertical (x local, y) orienté par yaw. On monte dessus pour gagner de la hauteur ; la vitesse de la nacelle est transmise. Le bas du cercle doit être accessible d\'un saut depuis une plateforme.', params: { count: '1–12 (défaut 4)', radius: 'm 1.5–20 (défaut 5)', period: 'secondes par tour 4–60 (défaut 14)', phase: '0–1' } },
       { type: 'pistons', description: 'Pistons de sol : `count` dalles alignées le long de x local dans `size` (position basse = pos) qui montent et descendent de `height` m en sinusoïde, la dalle k décalée de k × stagger cycle. On se tient dessus.', params: { count: '1–16 (défaut 4)', height: 'm 0.3–8 (défaut 2)', period: 'secondes 1–20 (défaut 3)', stagger: 'fraction de cycle 0–1 (défaut 0.25)', phase: '0–1' } },
       { type: 'wreckingball', description: 'Boule de démolition (pendule conique) : `pos` est le pivot, la boule (`size`) pend à `length` m et décrit un cercle horizontal de rayon length × sin(angle) à l\'altitude pos.y − length × cos(angle). Éjecte le joueur.', params: { length: 'bras 1–20 (défaut 6)', angle: 'inclinaison du bras en radians 0.1–1.3 (défaut 0.7)', period: 'secondes par tour 2–20 (défaut 4)', phase: '0–1' } },
       { type: 'crusher', description: 'Étau : deux murs (épaisseur `thickness`, hauteur size.y, profondeur size.z) face à face le long de x local, qui se rapprochent jusqu\'à `minGap` puis s\'écartent jusqu\'à size.x (écart intérieur). Jamais écrasant : ils poussent le joueur. On passe entre eux le long de z local.', params: { minGap: 'écart minimal m 1.2–20 (défaut 1.4)', thickness: 'm 0.3–4 (défaut 1)', period: 'secondes 1.5–20 (défaut 4)', phase: '0–1' } },
-      { type: 'blink', description: 'Dalle clignotante : solide pendant la fraction `on` du cycle, absente le reste du temps (elle clignote juste avant de disparaître). On se tient dessus.', params: { period: 'secondes 1.5–20 (défaut 4)', on: 'fraction solide 0.2–0.9 (défaut 0.6)', phase: '0–1' } },
-      { type: 'hazard', description: 'Lave / eau / acide : surface solide dont le moindre contact renvoie au dernier checkpoint. À poser sous ou entre les plateformes (jamais sur le chemin obligé).', params: { style: '"lava" (défaut), "water" ou "acid"' } },
+      { type: 'blink', description: 'Dalle clignotante : solide pendant la fraction `on` du cycle, absente le reste du temps (elle clignote juste avant de disparaître). On se tient dessus.', params: { period: 'secondes 1.5–20 (défaut 4)', on: 'fraction solide 0.2–0.9 (défaut 0.6)', phase: '0–1', skin: '"wing" (aile d\'oiseau qui se replie vers le haut, charnière côté −x local), "scree" (éboulis qui s\'écroule puis se reforme), "cloud"' } },
+      { type: 'hazard', description: 'Lave / eau / acide : surface solide dont le moindre contact renvoie au dernier checkpoint. À poser sous ou entre les plateformes (jamais sur le chemin obligé).', params: { style: '"lava" (défaut), "water", "acid" ou "floor" (parquet de la maison)' } },
       { type: 'boulder', description: 'Boules qui dévalent : toutes les `interval` s une boule de diamètre size.x part de pos et file en ligne droite jusqu\'à pos + delta en `travel` s, puis disparaît (plusieurs boules en même temps si travel > interval). Éjecte le joueur. pos.y = sol + rayon.', params: { delta: '[x, y, z] trajet', interval: 'secondes entre deux boules 1–20 (défaut 4)', travel: 'durée du trajet 1–20 (défaut 5)', phase: '0–1' } },
       { type: 'fakewall', description: 'Faux mur / raccourci secret : ressemble à une plateforme mais n\'a aucune collision (on passe au travers, on tombe si on marche dessus).', params: { color: 'optionnel, "#rrggbb"' } },
-      { type: 'deco', description: 'Décor sans collision, posé avec sa base en bas de la boîte (size donne l\'échelle).', params: { kind: '"tree" (défaut), "rock", "balloon", "arrow", "flag", "cactus", "mushroom", "crystal", "crowd" (petits spectateurs qui sautillent, répartis dans la boîte)', color: 'optionnel, "#rrggbb"' } },
+      { type: 'deco', description: 'Décor sans collision, posé avec sa base en bas de la boîte (size donne l\'échelle).', params: { kind: '"tree" (défaut), "rock", "balloon", "arrow", "flag", "cactus", "mushroom", "crystal", "crowd" (petits spectateurs qui sautillent, répartis dans la boîte), "flowers" (bouquet dans un vase), "stem" (tige de tournesol, verticale), "cloud" (nuage), "rack" (montants d\'étendoir et linge pendu, le long de x local), "room" (murs de la maison autour de la boîte)', color: 'optionnel, "#rrggbb"' } },
       { type: 'sign', description: 'Panneau sans collision affichant un texte court ; face vers +z local.', params: { text: '≤ 60 caractères' } },
       { type: 'fog', description: 'Zone de brouillard / obscurité sans collision : quand la caméra ou le joueur y est, brouillard épais.', params: { density: '0–1 (défaut 0.6)', color: 'optionnel, "#rrggbb"' } },
       { type: 'mud', description: 'Boue / colle : dalle solide sur laquelle on avance lentement et on saute bas.', params: { slow: 'facteur de vitesse 0.15–0.9 (défaut 0.45)', jumpFactor: `facteur de saut 0.3–1 (défaut 0.6 → saut de ${r(jumpHeight(PHYS.jumpV * 0.6))} m)` } },
@@ -725,9 +824,15 @@ export function elementCatalog() {
       { type: 'memory', description: 'Dalles mémoire : grille cols × rows de dalles dans `size` (colonnes le long de x local, rangées le long de z local : on la traverse de −z vers +z local). Le serveur piège au hasard une partie des dalles en gardant toujours un chemin sûr (une dalle par rangée, colonnes voisines ou en diagonale). Une dalle piégée tombe dès qu\'on s\'y pose et reste tombée pour tous ; une dalle sûre s\'allume pour tous. La disposition n\'est jamais envoyée aux clients.', params: { cols: '2–8 (défaut 3)', rows: '2–12 (défaut 5)', gap: 'joint entre dalles m 0–1 (défaut 0.25)', traps: 'part des dalles hors chemin piégées 0.1–0.9 (défaut 0.5)' } },
       { type: 'itembox', description: 'Boîte surprise (sans collision, ex. size [1, 1, 1], à hauteur de corps au-dessus du chemin) : le premier joueur sans objet qui la touche reçoit un objet au hasard (super saut 8 s, bouclier 6 s, banane, gant de boxe) ; elle réapparaît après `respawn` s.', params: { respawn: 'secondes 2–60 (défaut 6)' } },
       { type: 'coin', description: 'Pièce (sans collision, ex. size [0.8, 0.8, 0.8]) : chaque joueur peut ramasser chaque pièce une fois ; elles départagent le classement selon le réglage de la manche.', params: {} },
+      { type: 'popper', description: 'Castors (tape-taupe) : grille cols × rows de trous dans l\'empreinte de la boîte. Le bas de la boîte est la surface du plateau (poser la boîte sur une dalle) ; un castor sorti remplit la boîte sur toute sa hauteur (ex. 1.4 m). Chaque trou, à son rythme, fait jaillir un castor au hasard (le trou tremble juste avant) : il éjecte ceux qui sont dessus ou contre lui.', params: { cols: '1–8 (défaut 3)', rows: '1–8 (défaut 3)', period: 'secondes par cycle d\'un trou 1–12 (défaut 2.4)', up: 'fraction du cycle où le castor est sorti 0.15–0.8 (défaut 0.45)', chance: 'probabilité de sortie à chaque cycle 0.1–1 (défaut 0.45)', phase: '0–1' } },
+      { type: 'geyser', description: 'Jet de lave : colonne (pos/size) qui jaillit pendant la fraction `on` du cycle puis s\'arrête (elle bouillonne 1 s avant de repartir). Pendant le jet, la toucher renvoie au checkpoint. Le poser entre deux dalles : on passe quand il est éteint.', params: { period: 'secondes 2–20 (défaut 4)', on: 'fraction du cycle en éruption 0.15–0.8 (défaut 0.4)', phase: '0–1' } },
+      { type: 'rockfall', description: 'Chute de pierres : la boîte est la zone (bas = sol où elles s\'écrasent, haut = d\'où elles tombent). Toutes les `interval` s, `count` pierres tombent en `warn` s à des endroits tirés au hasard ; une ombre grandit au sol pour prévenir. Une pierre qui tombe éjecte. Prévoir interval ≥ warn + 0.4 + 0.35 × count.', params: { count: '1–6 (défaut 2)', stone: 'diamètre m 0.4–2.5 (défaut 1)', interval: 'secondes 1.5–12 (défaut 3)', warn: 'durée de la chute = préavis de l\'ombre, s 0.6–4 (défaut 1.4)', phase: '0–1' } },
     ],
   };
 }
+
+/** Apparences proposées pour les dalles (catalogue). */
+const SKIN_DOC = 'apparence optionnelle (collision inchangée) : maison "table", "notebook", "pencilcase", "pencil" (crayon couché le long de z local), "tv", "pot", "leaf", "wire" (fil d\'étendoir : corde fine et pose d\'équilibriste, size.z ≈ 0.5) ; ciel "cloud", "plane", "kite", "bird", "heli" ; volcan "rock", "scree"';
 
 /** Marge de sécurité appliquée aux sauts par la validation. */
 export const SAFETY = 0.85;

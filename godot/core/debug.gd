@@ -4,7 +4,8 @@ extends Node
 ##   --bots=9          remplit le lobby de bots (si l'on est l'hôte)
 ##   --autostart       lance la partie dès que les bots sont là
 ##   --games=mortar --rounds=1   restreint les jeux et le nombre de manches (si l'on est l'hôte)
-##   --set=mortar.buildTime=5,parkour.duration=45   règle des options de jeu (si l'on est l'hôte)
+##   --set=mortar.buildTime=5,parkour.duration=45   règle des options de jeu (si l'on est l'hôte) ;
+##     liste avec « | » : parkour.levels=maison|ciel (ou maison| pour un seul niveau)
 ##   --auto            pilote automatique : court vers l'avant, saute et tire de temps en temps
 ##   --auto=fire       pilote automatique immobile : pose des blocs puis tire
 ##   --hits --die      perce la peau des personnages à 3 s, puis les réduit en tas d'os à 6 s
@@ -83,7 +84,10 @@ func on_lobby(m: Dictionary) -> void:
 			if not s["game"].has(game):
 				s["game"][game] = {}
 			var val := kv.get_slice("=", 1)
-			s["game"][game][key.get_slice(".", 1)] = float(val) if val.is_valid_float() else val  # parkour.mode=best
+			if val.contains("|"):
+				s["game"][game][key.get_slice(".", 1)] = Array(val.split("|", false))  # liste : parkour.levels=maison|ciel
+			else:
+				s["game"][game][key.get_slice(".", 1)] = float(val) if val.is_valid_float() else val  # parkour.mode=best
 		main.net.send({"t": "settings", "settings": s})
 		return
 	var want := Config.arg_int("bots")

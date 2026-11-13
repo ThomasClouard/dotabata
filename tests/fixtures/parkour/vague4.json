@@ -1,0 +1,26 @@
+{
+  "title": "Banc d'essai vague 4",
+  "difficulty": 3,
+  "elements": [
+    { "id": "depart", "type": "start", "pos": [0, -0.5, 0], "size": [10, 1, 10], "skin": "notebook" },
+    { "type": "deco", "kind": "flowers", "pos": [3.5, 0.9, 3], "size": [1.4, 2.8, 1.4] },
+    { "type": "deco", "kind": "cloud", "pos": [-9, -6, 10], "size": [6, 2, 4] },
+    { "type": "deco", "kind": "room", "pos": [0, 0, 40], "size": [60, 30, 80] },
+    { "type": "hazard", "style": "floor", "pos": [0, -12, 40], "size": [60, 1, 80] },
+    { "id": "castors", "type": "platform", "pos": [0, -0.5, 10], "size": [6, 1, 8], "skin": "table" },
+    { "type": "popper", "pos": [0, 0.7, 10], "size": [5, 1.4, 6], "cols": 3, "rows": 3, "period": 2.2, "chance": 0.6 },
+    { "type": "hammer", "pos": [0, 6, 12], "size": [2, 1.4, 1.4], "length": 5.2, "axis": "x", "period": 3.2, "skin": "mallet" },
+    { "type": "platform", "pos": [0, -0.5, 17.5], "size": [3, 1, 3], "skin": "rock" },
+    { "type": "geyser", "pos": [0, 1, 20.5], "size": [1.6, 6, 1.6], "period": 3, "on": 0.4 },
+    { "type": "platform", "pos": [0, -0.5, 23.5], "size": [3, 1, 3], "skin": "rock" },
+    { "type": "checkpoint", "pos": [0, -0.5, 29], "size": [6, 1, 6], "skin": "rock" },
+    { "type": "platform", "pos": [0, -0.5, 38], "size": [5, 1, 10], "skin": "rock" },
+    { "type": "rockfall", "pos": [0, 5, 38], "size": [5, 11, 9], "count": 3, "stone": 1.1, "interval": 2.8, "warn": 1.3 },
+    { "type": "platform", "pos": [0, -0.15, 47], "size": [7, 0.3, 0.5], "yaw": 1.5708, "skin": "wire" },
+    { "type": "blink", "pos": [0, -0.5, 53], "size": [3, 1, 3], "skin": "scree" },
+    { "type": "crumble", "pos": [0, -0.5, 58], "size": [3, 1, 3], "delay": 1, "skin": "cloud" },
+    { "type": "moving", "pos": [0, -0.5, 63], "size": [3, 1, 3], "delta": [0, -2, 0], "skin": "rock" },
+    { "type": "turntable", "pos": [0, -0.5, 69], "size": [6, 1, 6], "speed": 0.7, "skin": "record" },
+    { "type": "finish", "pos": [0, -0.5, 76], "size": [8, 1, 6], "skin": "heli" }
+  ]
+}

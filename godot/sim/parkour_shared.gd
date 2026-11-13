@@ -113,6 +113,10 @@ static func hit_factor(c: Phys.Contact) -> float:
 			return 1.2 if side and speed > 1.5 else 0.0
 		"gate":
 			return 1.0 if side and c.cvy < -2.0 else 0.0  # lame qui tombe
+		"popper":
+			return 1.0 if c.cvy > 1.5 else 0.0  # castor qui jaillit
+		"rockfall":
+			return 1.0 if c.cvy < -3.0 else 0.0  # pierre qui tombe
 	return 0.0
 
 
@@ -127,7 +131,7 @@ static func post_step(b: Phys.Body, contacts: Array) -> Dictionary:
 	var boosted := false
 	var crumble: Array = []
 	for c: Phys.Contact in contacts:
-		if c.tag == "hazard":
+		if c.tag == "hazard" or c.tag == "geyser":
 			killed = true
 			hazard = c.id
 		if c.bounced:
@@ -143,8 +147,8 @@ static func post_step(b: Phys.Body, contacts: Array) -> Dictionary:
 		var k := hit_factor(c)
 		if k <= 0.0:
 			continue
-		if c.tag == "gate":
-			# la lame tombe : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
+		if c.tag == "gate" or c.tag == "popper" or c.tag == "rockfall":
+			# poussée verticale : on écarte le joueur à l'horizontale (selon la normale, sinon à rebours de sa course, sinon vers +z)
 			var dx := c.nx
 			var dz := c.nz
 			var d := sqrt(dx * dx + dz * dz)
@@ -156,9 +160,16 @@ static func post_step(b: Phys.Body, contacts: Array) -> Dictionary:
 				dx = 0.0
 				dz = 1.0
 				d = 1.0
-			b.vx = (dx / d) * 7.0
-			b.vz = (dz / d) * 7.0
-			b.vy = minf(b.vy, 0.0)
+			var sp := 7.0 if c.tag == "gate" else (4.5 if c.tag == "popper" else 6.0)
+			b.vx = (dx / d) * sp
+			b.vz = (dz / d) * sp
+			# lame : plaqué au sol ; castor : projeté en l'air ; pierre : petit bond
+			if c.tag == "gate":
+				b.vy = minf(b.vy, 0.0)
+			elif c.tag == "popper":
+				b.vy = maxf(b.vy, 8.0)
+			else:
+				b.vy = maxf(b.vy, 3.0)
 		else:
 			b.vx = c.cvx * k
 			b.vz = c.cvz * k

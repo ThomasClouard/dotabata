@@ -19,6 +19,7 @@ const meta = {
   author: z.string().optional(),
   difficulty: z.number().int().min(1).max(5).optional().describe('1 (facile) à 5 (corsé)'),
   sky: z.string().optional().describe('Couleur du ciel, "#rrggbb"'),
+  sea: z.string().optional().describe('Couleur de la mer sous le parcours, "#rrggbb" (défaut : slime rose)'),
   killY: z.number().optional().describe('Altitude sous laquelle on réapparaît (par défaut : 12 m sous l\'élément le plus bas)'),
 };
 

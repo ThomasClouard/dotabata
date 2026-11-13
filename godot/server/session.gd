@@ -38,7 +38,7 @@ var _after_scores := Callable()
 var _timer_at := -1.0
 var _timer_fn := Callable()
 var _next_id := 1
-var _t0 := Time.get_ticks_usec()
+var _t0 := Config.ticks_usec()
 var _last_tick := 0.0
 var _levels_fp := ""
 var _levels_check := 0.0
@@ -85,7 +85,7 @@ static func _clean_server_cfg(raw: Dictionary, prev: Dictionary) -> Dictionary:
 
 ## Horloge serveur, en secondes.
 func now() -> float:
-	return (Time.get_ticks_usec() - _t0) / 1e6
+	return (Config.ticks_usec() - _t0) / 1e6
 
 
 func humans() -> Array:
